@@ -1,8 +1,9 @@
 from discord.ext import commands
 import configparser
-from traceback import print_exc, format_exception, print_exception
+from traceback import format_exception, print_exception
 import sys
 import logging
+
 cogs = [
     "cogs.gallery",
     "cogs.voting",
@@ -41,17 +42,16 @@ class Mayushii(commands.Bot):
             try:
                 bot.load_extension(cog)
                 self.logger.info(f'Loaded {cog}')
-            except Exception:
-                print_exc()
-                self.logger.error(f'Encountered error while loading {cog}')
+            except Exception as exc:
+                self.logger.error(f'Encountered error while loading {cog}\n {format_exception(type(exc), exc, exc.__traceback__)}')
 
     async def on_command_error(self, ctx, exc):
         if isinstance(exc, commands.CommandNotFound):
             pass
+        elif isinstance(exc, commands.CheckFailure):
+            await ctx.send(f"You dont dont have permissions to use {ctx.command}.")
         elif isinstance(exc, commands.CommandInvokeError):
-            print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
             return
-
 
     async def on_error(self, event, *args, **kwargs):
         if isinstance(args[0], commands.errors.CommandNotFound):

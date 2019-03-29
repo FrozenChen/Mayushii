@@ -122,6 +122,7 @@ class Voting(commands.Cog):
             self.current_poll.active = False
         poll.active = True
         self.s.commit()
+        self.logger.info(f"Enabled poll {poll.name}")
         await ctx.send(f"Enabled poll {poll.name}")
         self.current_poll = poll
 
@@ -165,13 +166,14 @@ class Voting(commands.Cog):
         embed.add_field(name="Votes", value=msg, inline=False)
         await ctx.send(embed=embed)
 
-
     @vote.error
     async def on_error(self, ctx ,exc):
         if isinstance(exc, commands.CheckFailure):
             await ctx.send("There is no ongoing poll")
-            return
+            return True
 
+    async def cog_command_error(self, ctx, exc):
+        self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
 
 def setup(bot):
     bot.add_cog(Voting(bot))

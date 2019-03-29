@@ -1,12 +1,14 @@
 import discord
 from discord.ext import commands
 import subprocess
+from urllib import request
 
 
 class General(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.logger = self.bot.get_logger(self)
 
     @commands.command()
     async def about(self, ctx):
@@ -22,6 +24,22 @@ class General(commands.Cog):
         subprocess.run(["git", "pull"])
         await self.bot.close()
 
+    @commands.has_permissions(manage_guild=True)
+    @commands.command()
+    async def changepfp(self, ctx, url: str = ""):
+        if not url:
+            if ctx.message.attachments:
+                url = ctx.message.attachments[0].url
+            else:
+                await ctx.send("No image provided")
+                return
+        req = request.Request(url, headers={"user-agent": "Mayushii"})
+        data = request.urlopen(req).read()
+        await self.bot.user.edit(avatar=data)
+        await ctx.send("Profile picture changed successfully.")
+
+    async def cog_command_error(self, ctx, exc):
+        self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
 
 def setup(bot):
     bot.add_cog(General(bot))

@@ -9,6 +9,7 @@ class Gallery(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        self.logger = self.bot.get_logger(self)
         engine = create_engine('sqlite:///gallery.db')
         session = sessionmaker(bind=engine)
         self.s = session()
@@ -20,27 +21,23 @@ class Gallery(commands.Cog):
         if message.attachments and message.attachments[0].height:
             self.add_art(message.author, message.attachments[0].url)
 
+    def add_artist(self, artist):
+        self.s.add(Artist(userid=artist.id))
+        self.logger.debug(f'Added artist artist.id')
+
     def add_art(self, author, url):
         if self.s.query(BlackList).filter(BlackList.userid == author.id).scalar():
             return
         if not self.s.query(Artist).filter(Artist.userid == author.id).all():
-            self.s.add(Artist(userid=author.id))
+            self.add_artist(author.id)
         self.s.add(Art(artist=author.id, link=url))
+        self.logger.debug(f'Added art with link {url}')
         self.s.commit()
 
     def delete_art(self, art_id):
         self.s.query(Art).filter(Art.id == art_id).delete()
+        self.logger.debug(f'Added art with id {art_id}')
         self.s.commit()
-
-    @commands.guild_only()
-    @commands.command()
-    async def addart(self, ctx):
-        """Add image to user gallery. Requires a image to be uploaded along with the command"""
-        if not ctx.message.attachments:
-            await ctx.send("No image attached")
-        print(ctx.message.attachments[0])
-        self.add_art(ctx.author, ctx.message.attachments[0].url)
-        await ctx.send("Art added succesfullly")
 
     @commands.command()
     async def delart(self, ctx, art_id: int):
@@ -107,6 +104,8 @@ class Gallery(commands.Cog):
         self.s.delete(user)
         await ctx.send(f"Removed {member} from the blacklist")
 
+    async def cog_command_error(self, ctx, exc):
+        self.logger.debug(f"{ctx.command}: {exc}")
 
 def setup(bot):
     bot.add_cog(Gallery(bot))
