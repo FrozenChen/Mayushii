@@ -29,7 +29,7 @@ class Gallery(commands.Cog):
         if self.s.query(BlackList).filter(BlackList.userid == author.id).scalar():
             return
         if not self.s.query(Artist).filter(Artist.userid == author.id).all():
-            self.add_artist(author.id)
+            self.add_artist(author)
         self.s.add(Art(artist=author.id, link=url))
         self.logger.debug(f'Added art with link {url}')
         self.s.commit()
@@ -80,6 +80,15 @@ class Gallery(commands.Cog):
         self.s.delete(artist)
         self.s.commit()
         await ctx.send("Artist deleted")
+
+    @commands.guild_only()
+    @commands.has_permissions(manage_guild=True)
+    @commands.command()
+    async def retroart(self, ctx):
+        async for message in ctx.channel.history(limit=None):
+            if message.attachments and message.attachments[0].height:
+                self.add_art(message.author, message.attachments[0].url)
+        await ctx.send("Added previously posted images succesfully")
 
     @commands.has_permissions(manage_nicknames=True)
     @commands.guild_only()

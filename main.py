@@ -1,7 +1,7 @@
 from discord.ext import commands
 import configparser
-from traceback import format_exception, print_exception
-import sys
+from traceback import format_exception
+from sys import exc_info
 import logging
 
 cogs = [
@@ -15,7 +15,6 @@ class Mayushii(commands.Bot):
 
     def __init__(self, command_prefix, **options):
         super().__init__(command_prefix, **options)
-
         self.logger = self.get_logger(self)
         self.logger.info('Loading config.ini')
         self.config = configparser.ConfigParser()
@@ -48,14 +47,31 @@ class Mayushii(commands.Bot):
     async def on_command_error(self, ctx, exc):
         if isinstance(exc, commands.CommandNotFound):
             pass
+
+        elif isinstance(exc, commands.NoPrivateMessage):
+            await ctx.send(f'{exc}')
+
         elif isinstance(exc, commands.CheckFailure):
-            await ctx.send(f"You dont dont have permissions to use {ctx.command}.")
+            await ctx.send(f"You cannot use {ctx.command}.")
+
+        elif isinstance(exc, commands.BadArgument):
+            await ctx.send(f"Bad argument in {ctx.command}: `{exc}`")
+            await ctx.send_help(ctx.command)
+
+        elif isinstance(exc, commands.MissingRequiredArgument):
+            await ctx.send(f"Missing arguments in `{ctx.command}`")
+            await ctx.send_help(ctx.command)
+
         elif isinstance(exc, commands.CommandInvokeError):
-            return
+            await ctx.send(f"`{ctx.command}` caused an exception.")
+            ctx.cog.logger.error(f"Exception occurred in {ctx.command} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+
+        else:
+            await ctx.send(f"Unhandled exception in `{ctx.command}`")
+            ctx.cog.logger.error(f"Unhandled exception occurred in {ctx.command} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
 
     async def on_error(self, event, *args, **kwargs):
-        if isinstance(args[0], commands.errors.CommandNotFound):
-            return
+        self.logger.error(f'Error occurred in {event}', exc_info=exc_info())
 
 
 bot = Mayushii(command_prefix="$", description="A bot for Nintendo Homebrew artistic channel")

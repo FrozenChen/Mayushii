@@ -24,6 +24,12 @@ class General(commands.Cog):
         subprocess.run(["git", "pull"])
         await self.bot.close()
 
+    @commands.has_permissions(manage_channels=True)
+    @commands.command()
+    async def quit(self, ctx):
+        await ctx.send("See you later!")
+        await self.bot.close()
+
     @commands.has_permissions(manage_guild=True)
     @commands.command()
     async def changepfp(self, ctx, url: str = ""):

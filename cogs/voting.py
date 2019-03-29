@@ -92,6 +92,7 @@ class Voting(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
+    @commands.has_permissions(manage_channels=True)
     @poll.command()
     async def create(self, ctx, name, link, *, options):
         """Creates a poll"""
@@ -112,6 +113,7 @@ class Voting(commands.Cog):
         else:
             await ctx.send("Alright then")
 
+    @commands.has_permissions(manage_channels=True)
     @poll.command()
     async def activate(self, ctx, poll_id: int):
         """Activates a poll"""
@@ -134,6 +136,7 @@ class Voting(commands.Cog):
             embed.add_field(name=poll.name, value=msg)
         await ctx.send(embed=embed)
 
+    @commands.has_permissions(manager_guild=True)
     @poll.command()
     async def delete(self, ctx, poll_id: int):
         """Deletes a poll"""
@@ -145,6 +148,7 @@ class Voting(commands.Cog):
             self.s.commit()
             await ctx.send("Poll deleted successfully")
 
+    @commands.has_permissions(change_nicknames=True)
     @poll.command()
     async def info(self, ctx, poll_id: int = None):
         """Shows info about current poll or provided poll id"""
