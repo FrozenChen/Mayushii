@@ -1,0 +1,6 @@
+[Main]
+token = # Set your token here as str
+guild = # Guild ID
+[Art]
+[Vote]
+days_before_vote = # Value in days as int
