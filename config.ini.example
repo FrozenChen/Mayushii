@@ -1,6 +1,11 @@
 [Main]
-token = # Set your token here as str
-guild = # Guild ID
+# Set your token here
+token =
+# Guild ID
+guild =
 [Art]
+#id of the art channel
+art_channel =
 [Vote]
-days_before_vote = # Value in days as int
+# Value in days
+days_before_vote =

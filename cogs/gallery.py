@@ -15,10 +15,11 @@ class Gallery(commands.Cog):
         self.s = session()
         Base.metadata.create_all(engine, tables=[Art.__table__, Artist.__table__, BlackList.__table__])
         self.s.commit()
+        self.art_channel = int(self.bot.config['Art']['art_channel'])
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.attachments and message.attachments[0].height and not isinstance(message.channel,discord.abc.PrivateChannel):
+        if message.channel.id == self.art_channel and message.attachments and message.attachments[0].height and not isinstance(message.channel, discord.abc.PrivateChannel):
             self.add_art(message.author, message.attachments[0].url)
             await message.channel.send("Added image to gallery!")
 
@@ -82,16 +83,6 @@ class Gallery(commands.Cog):
         self.s.delete(artist)
         self.s.commit()
         await ctx.send("Artist deleted")
-
-    @commands.guild_only()
-    @commands.has_permissions(manage_guild=True)
-    @commands.command()
-    async def retroart(self, ctx):
-        """Adds all images in the channel to the user gallert. ONLY USE ONCE!!"""
-        async for message in ctx.channel.history(limit=None):
-            if message.attachments and message.attachments[0].height:
-                self.add_art(message.author, message.attachments[0].url)
-        await ctx.send("Added previously posted images succesfully")
 
     @commands.has_permissions(manage_nicknames=True)
     @commands.guild_only()
