@@ -3,6 +3,7 @@ import configparser
 from traceback import format_exception
 from sys import exc_info
 import logging
+import discord
 
 cogs = [
     "cogs.gallery",
@@ -47,7 +48,10 @@ class Mayushii(commands.Bot):
                 self.logger.info(f'Loaded {cog}')
             except Exception as exc:
                 self.logger.error(f"Encountered error while loading {cog} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+
     async def on_command_error(self, ctx, exc):
+        logger = self.logger if ctx.cog is None else ctx.cog.logger
+
         if isinstance(exc, commands.CommandNotFound):
             pass
 
@@ -66,12 +70,14 @@ class Mayushii(commands.Bot):
             await ctx.send_help(ctx.command)
 
         elif isinstance(exc, commands.CommandInvokeError):
-            await ctx.send(f"`{ctx.command}` caused an exception.")
-            ctx.cog.logger.error(f"Exception occurred in {ctx.command} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
-
+            if isinstance(exc.original, discord.Forbidden):
+                await ctx.send("I can't do this!")
+            else:
+                await ctx.send(f"`{ctx.command}` caused an exception.")
+                logger.error(f"Exception occurred in {ctx.command} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
         else:
             await ctx.send(f"Unhandled exception in `{ctx.command}`")
-            ctx.cog.logger.error(f"Unhandled exception occurred in {ctx.command} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+            logger.error(f"Unhandled exception occurred in {ctx.command} {''.join(format_exception(type(exc), exc, exc.__traceback__))}")
 
     async def on_error(self, event, *args, **kwargs):
         self.logger.error(f'Error occurred in {event}', exc_info=exc_info())

@@ -25,7 +25,7 @@ class Gallery(commands.Cog):
 
     def add_artist(self, artist):
         self.s.add(Artist(userid=artist.id))
-        self.logger.debug(f'Added artist artist.id')
+        self.logger.debug(f'Added artist {artist.id}')
 
     def add_art(self, author, url):
         if self.s.query(BlackList).get(author.id):
@@ -57,8 +57,10 @@ class Gallery(commands.Cog):
     @commands.command()
     async def gallery(self, ctx, member: discord.Member = None):
         """Show user gallery in DMs"""
-        if isinstance(ctx.channel, discord.abc.GuildChannel):
+        try:
             await ctx.message.delete()
+        except discord.Forbidden:
+            pass
         if not member:
             member = ctx.author
         artist = self.s.query(Artist).get(member.id)
