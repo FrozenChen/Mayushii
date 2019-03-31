@@ -18,15 +18,16 @@ class Gallery(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.attachments and message.attachments[0].height:
+        if message.attachments and message.attachments[0].height and not isinstance(message.channel,discord.abc.PrivateChannel):
             self.add_art(message.author, message.attachments[0].url)
+            await message.channel.send("Added image to gallery!")
 
     def add_artist(self, artist):
         self.s.add(Artist(userid=artist.id))
         self.logger.debug(f'Added artist artist.id')
 
     def add_art(self, author, url):
-        if self.s.query(BlackList).filter(BlackList.userid == author.id).scalar():
+        if self.s.query(BlackList).get(author.id):
             return
         if not self.s.query(Artist).filter(Artist.userid == author.id).all():
             self.add_artist(author)
@@ -36,7 +37,7 @@ class Gallery(commands.Cog):
 
     def delete_art(self, art_id):
         self.s.query(Art).filter(Art.id == art_id).delete()
-        self.logger.debug(f'Added art with id {art_id}')
+        self.logger.debug(f'Deleted art with id {art_id}')
         self.s.commit()
 
     @commands.command()
@@ -46,16 +47,17 @@ class Gallery(commands.Cog):
         if art is None:
             await ctx.send("Art ID not found")
             return
-        elif not ctx.author.id == art.artist or not ctx.author.permissions_in(ctx.channel).manage_nicknames:
-            await ctx.send("You cant delete other people art scum!")
+        elif ctx.author.id != art.artist and not ctx.author.permissions_in(ctx.channel).manage_nicknames:
+            await ctx.send("You cant delete other people art!")
             return
-        await self.s.delete(art)
-        await ctx.send("Art deleted succesfully!")
+        self.s.delete(art)
+        await ctx.send("Art deleted successfully!")
 
     @commands.command()
     async def gallery(self, ctx, member: discord.Member = None):
         """Show user gallery in DMs"""
-        await ctx.message.delete()
+        if isinstance(ctx.channel, discord.abc.GuildChannel):
+            await ctx.message.delete()
         if not member:
             member = ctx.author
         artist = self.s.query(Artist).get(member.id)
@@ -85,6 +87,7 @@ class Gallery(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     @commands.command()
     async def retroart(self, ctx):
+        """Adds all images in the channel to the user gallert. ONLY USE ONCE!!"""
         async for message in ctx.channel.history(limit=None):
             if message.attachments and message.attachments[0].height:
                 self.add_art(message.author, message.attachments[0].url)
@@ -106,7 +109,7 @@ class Gallery(commands.Cog):
     @commands.guild_only()
     @commands.command()
     async def whiteart(self, ctx, member: discord.Member):
-        """Blacklist user"""
+        """Removes user from Blacklist"""
         user = self.s.query(BlackList).get(member.id)
         if user is None:
             await ctx.send(f"{member} is not in the blacklist")
@@ -115,6 +118,7 @@ class Gallery(commands.Cog):
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {exc}")
+
 
 def setup(bot):
     bot.add_cog(Gallery(bot))

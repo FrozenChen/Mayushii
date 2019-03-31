@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, and_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from utils.database import Poll, Voter, Vote, BlackList
-import logging
+from datetime import datetime
 
 Base = declarative_base()
 
@@ -27,6 +27,11 @@ class Voting(commands.Cog):
 
     def ongoing_poll(ctx):
         return ctx.cog.current_poll is not None
+
+    def not_new(ctx):
+        print(datetime.now() - ctx.author.joined_at)
+        return datetime.now() - ctx.author.joined_at
+
 
     def add_vote(self, user, option):
         voter = self.s.query(Voter).get(user.id)
@@ -69,6 +74,7 @@ class Voting(commands.Cog):
             result[option] = c
         return result
 
+    @commands.check(not_new)
     @commands.check(ongoing_poll)
     @commands.command()
     async def vote(self, ctx, option: str):

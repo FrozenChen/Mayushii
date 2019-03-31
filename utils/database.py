@@ -1,4 +1,3 @@
-
 from sqlalchemy import Column, String, Integer, ForeignKey, Boolean
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
