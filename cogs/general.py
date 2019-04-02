@@ -34,8 +34,10 @@ class General(commands.Cog):
         try:
             self.bot.load_extension(f"cogs.{cog}")
             await ctx.send(f"Loaded `{cog}``!")
-        except Exception as exc:
-            await ctx.send(f'Failed to load cog! {type(exc).__name__}')
+        except commands.ExtensionNotFound:
+            await ctx.send(f"Extension {cog} not found")
+        except commands.ExtensionFailed:
+            await ctx.send(f"Error occurred when loading {cog}")
 
     @commands.has_permissions(manage_channels=True)
     @commands.command()

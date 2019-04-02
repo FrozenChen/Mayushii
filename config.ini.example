@@ -7,5 +7,5 @@ guild =
 #id of the art channel
 art_channel =
 [Vote]
-# Value in days
-days_before_vote =
+# How many days a user has to be member of the guild to be able to vote. Value in days.
+min_days =

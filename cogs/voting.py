@@ -1,4 +1,3 @@
-
 import asyncio
 import discord
 from discord.ext import commands
@@ -7,6 +6,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from utils.database import Poll, Voter, Vote, BlackList
 from datetime import datetime
+from utils.exceptions import TooNew, NoOnGoingPoll, BlackListed
 
 Base = declarative_base()
 
@@ -26,12 +26,20 @@ class Voting(commands.Cog):
         self.queue = asyncio.Queue()
 
     def ongoing_poll(ctx):
-        return ctx.cog.current_poll is not None
+        if ctx.cog.current_poll is None:
+            raise NoOnGoingPoll(f"There is no ongoing poll")
+        return True
 
     def not_new(ctx):
-        print(datetime.now() - ctx.author.joined_at)
-        return datetime.now() - ctx.author.joined_at
+        if (datetime.now() - ctx.author.joined_at).days < int(ctx.bot.config['Vote']['min_days']):
+            raise TooNew(f"Only members older than {ctx.bot.config['Vote']['min_days']} can participate.")
+        return True
 
+    def not_blacklisted(ctx):
+        if ctx.cog.s.query(BlackList).get(ctx.author.id):
+            ctx.message.delete()
+            raise BlackListed("You are blacklisted and cant use this command")
+        return True
 
     def add_vote(self, user, option):
         voter = self.s.query(Voter).get(user.id)
@@ -57,6 +65,15 @@ class Voting(commands.Cog):
         self.s.add(Poll(name=name, link=link, options=options))
         self.s.commit()
 
+    def add_blacklisted(self, user: discord.Member):
+        self.s.add(BlackList(userid=user.id))
+        self.s.commit()
+
+    def remove_blacklisted(self, user: discord.Member):
+        blacklisted = self.s.query(BlackList).get(user.id)
+        self.s.delete(blacklisted)
+        self.s.commit()
+
     @staticmethod
     def parse_options(options: str):
         return options.split(" | ")
@@ -67,7 +84,7 @@ class Voting(commands.Cog):
         self.s.commit()
         self.queue.task_done()
 
-    def count_votes(self, poll: Poll)-> dict:
+    def count_votes(self, poll: Poll):
         result = {}
         for option in self.parse_options(poll.options):
             c = self.s.query(Vote).filter(and_(Vote.poll_id == Poll.id, Vote.option == option)).count()
@@ -75,7 +92,9 @@ class Voting(commands.Cog):
         return result
 
     @commands.check(not_new)
+    @commands.check(not_blacklisted)
     @commands.check(ongoing_poll)
+    @commands.guild_only()
     @commands.command()
     async def vote(self, ctx, option: str):
         """Votes for a option in the current poll."""
@@ -92,6 +111,7 @@ class Voting(commands.Cog):
         await self.process_vote()
         await ctx.send("Vote added successfully")
 
+    @commands.guild_only()
     @commands.group()
     async def poll(self, ctx):
         """Poll related commands."""
@@ -102,11 +122,11 @@ class Voting(commands.Cog):
     @poll.command()
     async def create(self, ctx, name, link, *, options):
         """Creates a poll"""
-        await ctx.send("The following poll will be created:\n"
-                       f"Name={name}\n"
-                       f"link={link}\n"
-                       f"options={' '.join(self.parse_options(options))}\n"
-                       "Say `yes` to confirm or `no` to deny")
+        embed = discord.Embed(title="Proposed Poll", color=discord.Color.green())
+        embed.add_field(name="Name",value=name, inline=False)
+        embed.add_field(name="Link",value=link, inline=False)
+        embed.add_field(name="Options",value=' '.join(self.parse_options(options)), inline=False)
+        await ctx.send("Say `yes` to confirm poll creation, `no` to cancel", embed=embed)
         try:
             msg = await self.bot.wait_for('message', timeout=15, check=lambda message: message.author == ctx.author
                                           and 'yes' in message.content or 'no' in message.content)
@@ -142,7 +162,7 @@ class Voting(commands.Cog):
             embed.add_field(name=poll.name, value=msg)
         await ctx.send(embed=embed)
 
-    @commands.has_permissions(manager_guild=True)
+    @commands.has_permissions(manage_guild=True)
     @poll.command()
     async def delete(self, ctx, poll_id: int):
         """Deletes a poll"""
@@ -176,14 +196,34 @@ class Voting(commands.Cog):
         embed.add_field(name="Votes", value=msg, inline=False)
         await ctx.send(embed=embed)
 
-    @vote.error
-    async def on_error(self, ctx ,exc):
-        if isinstance(exc, commands.CheckFailure):
-            await ctx.send("There is no ongoing poll")
-            return True
+    @commands.group()
+    async def blacklist(self, ctx):
+        """Commands for the blacklist"""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @blacklist.command(name="add")
+    async def blacklist_add(self, ctx, member: discord.Member):
+        """Adds member to blacklist"""
+        if self.s.query(BlackList).get(member.id):
+            await ctx.send("User is already blacklisted")
+            return
+        self.add_blacklisted(member)
+        await ctx.send(f"Blacklisted {member.mention}!")
+
+    @blacklist.command(name="remove")
+    async def blacklist_remove(self, ctx, member: discord.Member):
+        """Removes member from blacklist."""
+        user = self.s.query(BlackList).get(member.id)
+        if not user:
+            await ctx.send("User is not blacklisted")
+            return
+        self.remove_blacklisted(member)
+        await ctx.send(f"Removed {member} from blacklist!")
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
+
 
 def setup(bot):
     bot.add_cog(Voting(bot))
