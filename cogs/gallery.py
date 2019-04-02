@@ -6,6 +6,7 @@ from utils.database import Art, Artist, BlackList, Base
 
 
 class Gallery(commands.Cog):
+    """Commands for managing a user gallery."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -19,9 +20,14 @@ class Gallery(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.channel.id == self.art_channel and message.attachments and message.attachments[0].height and not isinstance(message.channel, discord.abc.PrivateChannel):
-            self.add_art(message.author, message.attachments[0].url)
-            await message.channel.send("Added image to gallery!")
+        if message.channel.id == self.art_channel and not isinstance(message.channel, discord.abc.PrivateChannel):
+            count = 0
+            for attachment in message.attachments:
+                if attachment.height:
+                    self.add_art(message.author, message.attachments[0].url)
+                    count += 1
+            if count:
+                await message.channel.send(f"Added {count} image(s) to {message.author}'s gallery!")
 
     def add_artist(self, artist):
         self.s.add(Artist(userid=artist.id))
@@ -33,7 +39,7 @@ class Gallery(commands.Cog):
         if not self.s.query(Artist).filter(Artist.userid == author.id).all():
             self.add_artist(author)
         self.s.add(Art(artist=author.id, link=url))
-        self.logger.debug(f'Added art with link {url}')
+        self.logger.debug(f"Added art with link {url}")
         self.s.commit()
 
     def delete_art(self, art_id):

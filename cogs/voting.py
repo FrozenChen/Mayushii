@@ -12,7 +12,7 @@ Base = declarative_base()
 
 
 class Voting(commands.Cog):
-
+    """Commands for managing a poll."""
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)

@@ -5,6 +5,7 @@ from urllib import request
 
 
 class General(commands.Cog):
+    """General commands for general use."""
 
     def __init__(self, bot):
         self.bot = bot
@@ -25,6 +26,26 @@ class General(commands.Cog):
         await ctx.send("Pulling changes")
         subprocess.run(["git", "pull"])
         await self.bot.close()
+
+    @commands.has_permissions(manage_channels=True)
+    @commands.command()
+    async def load(self, ctx, cog: str):
+        """Load a oog"""
+        try:
+            self.bot.load_extension(f"cogs.{cog}")
+            await ctx.send(f"Loaded `{cog}``!")
+        except Exception as exc:
+            await ctx.send(f'Failed to load cog! {type(exc).__name__}')
+
+    @commands.has_permissions(manage_channels=True)
+    @commands.command()
+    async def unload(self, ctx, cog: str):
+        """Unloads a cog"""
+        try:
+            self.bot.unload_extension(f"cogs.{cog}")
+            await ctx.send(f"Unloaded {cog}!")
+        except Exception as exc:
+            await ctx.send(f'Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```')
 
     @commands.has_permissions(manage_channels=True)
     @commands.command()

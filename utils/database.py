@@ -8,11 +8,10 @@ Base = declarative_base()
 class Artist(Base):
     __tablename__ = "artist"
     userid = Column(Integer, primary_key=True)
-    likes = Column(Integer, default=0)
     gallery = relationship("Art", back_populates='user', cascade="all, delete, delete-orphan")
 
     def __repr__(self):
-        return f"<Artist userid='{self.userid}', likes={self.likes}>"
+        return f"<Artist userid='{self.userid}'>"
 
 
 class Art(Base):
