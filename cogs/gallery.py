@@ -22,12 +22,15 @@ class Gallery(commands.Cog):
     async def on_message(self, message):
         if message.channel.id == self.art_channel and not isinstance(message.channel, discord.abc.PrivateChannel):
             count = 0
+            added = []
             for attachment in message.attachments:
                 if attachment.height:
-                    self.add_art(message.author, message.attachments[0].url)
+                    art_id = self.add_art(message.author, attachment.url)
+                    added.append(art_id)
                     count += 1
             if count:
-                await message.channel.send(f"Added {count} image(s) to {message.author}'s gallery!")
+                print(added)
+                await message.channel.send(f"Added {count} image(s) to {message.author}'s gallery with id(s) {', '.join(map(str, added))}!")
 
     def add_artist(self, artist):
         self.s.add(Artist(userid=artist.id))
@@ -38,9 +41,12 @@ class Gallery(commands.Cog):
             return
         if not self.s.query(Artist).filter(Artist.userid == author.id).all():
             self.add_artist(author)
+        print('adding art')
         self.s.add(Art(artist=author.id, link=url))
-        self.logger.debug(f"Added art with link {url}")
         self.s.commit()
+        art = self.s.query(Art).filter(Art.link==url).scalar()
+        self.logger.debug(f"Added art with id {art.id}")
+        return art.id
 
     def delete_art(self, art_id):
         self.s.query(Art).filter(Art.id == art_id).delete()
