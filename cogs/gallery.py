@@ -44,7 +44,7 @@ class Gallery(commands.Cog):
         print('adding art')
         self.s.add(Art(artist=author.id, link=url))
         self.s.commit()
-        art = self.s.query(Art).filter(Art.link==url).scalar()
+        art = self.s.query(Art).filter(Art.link == url).scalar()
         self.logger.debug(f"Added art with id {art.id}")
         return art.id
 
@@ -54,17 +54,21 @@ class Gallery(commands.Cog):
         self.s.commit()
 
     @commands.command()
-    async def delart(self, ctx, art_id: int):
+    async def delart(self, ctx, art_ids: commands.Greedy[int]):
         """Removes image from user gallery"""
-        art = self.s.query(Art).get(art_id)
-        if art is None:
-            await ctx.send("Art ID not found")
-            return
-        elif ctx.author.id != art.artist and not ctx.author.permissions_in(ctx.channel).manage_nicknames:
-            await ctx.send("You cant delete other people art!")
-            return
-        self.s.delete(art)
-        await ctx.send("Art deleted successfully!")
+        deleted = []
+        for art_id in art_ids:
+            art = self.s.query(Art).get(art_id)
+            if art is None:
+                await ctx.send(f"ID {art_id} not found")
+                continue
+            elif ctx.author.id != art.artist and not ctx.author.permissions_in(ctx.channel).manage_nicknames:
+                await ctx.send("You cant delete other people art!")
+                return
+            self.delete_art(art_id)
+            deleted.append(str(art_id))
+        if deleted:
+            await ctx.send(f"Deleted with ID {', '.join(deleted)} successfully!")
 
     @commands.command()
     async def gallery(self, ctx, member: discord.Member = None):
@@ -76,7 +80,7 @@ class Gallery(commands.Cog):
         if not member:
             member = ctx.author
         artist = self.s.query(Artist).get(member.id)
-        if artist is not None:
+        if artist.gallery:
             for idx, art in enumerate(artist.gallery):
                 embed = discord.Embed(color=discord.Color.dark_red())
                 embed.set_author(name=f"{member.display_name}'s Gallery Image {idx + 1}", icon_url=member.avatar_url)
