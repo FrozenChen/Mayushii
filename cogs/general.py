@@ -1,8 +1,7 @@
 import discord
 from discord.ext import commands
 import subprocess
-from urllib import request
-
+import aiohttp
 
 class General(commands.Cog):
     """General commands for general use."""
@@ -66,10 +65,14 @@ class General(commands.Cog):
             else:
                 await ctx.send("No image provided")
                 return
-        req = request.Request(url, headers={"user-agent": "Mayushii"})
-        data = request.urlopen(req).read()
-        await self.bot.user.edit(avatar=data)
-        await ctx.send("Profile picture changed successfully.")
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as r:
+                if r.status != 200:
+                    await ctx.send("Failed to retrieve image!")
+                    js = await r.json()
+                data = await r.read()
+                await self.bot.user.edit(avatar=data)
+                await ctx.send("Profile picture changed successfully.")
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")

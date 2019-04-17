@@ -57,7 +57,7 @@ class Mayushii(commands.Bot):
         logger = self.logger if ctx.cog is None else ctx.cog.logger
 
         if isinstance(exc, commands.CommandNotFound):
-            pass
+            return
 
         elif isinstance(exc, (commands.NoPrivateMessage, exceptions.TooNew, exceptions.NoOnGoingPoll)):
             await ctx.send(exc)
