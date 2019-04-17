@@ -25,24 +25,22 @@ class Gallery(commands.Cog):
             added = []
             for attachment in message.attachments:
                 if attachment.height:
-                    art_id = self.add_art(message.author, attachment.url)
+                    art_id = self.add_art(message.author, attachment.url, message.content)
                     added.append(art_id)
                     count += 1
             if count:
-                print(added)
                 await message.channel.send(f"Added {count} image(s) to {message.author}'s gallery with id(s) {', '.join(map(str, added))}!")
 
     def add_artist(self, artist):
         self.s.add(Artist(userid=artist.id))
         self.logger.debug(f'Added artist {artist.id}')
 
-    def add_art(self, author, url):
+    def add_art(self, author, url, description=""):
         if self.s.query(BlackList).get(author.id):
             return
         if not self.s.query(Artist).filter(Artist.userid == author.id).all():
             self.add_artist(author)
-        print('adding art')
-        self.s.add(Art(artist=author.id, link=url))
+        self.s.add(Art(artist=author.id, link=url, description=description))
         self.s.commit()
         art = self.s.query(Art).filter(Art.link == url).scalar()
         self.logger.debug(f"Added art with id {art.id}")
@@ -52,6 +50,15 @@ class Gallery(commands.Cog):
         self.s.query(Art).filter(Art.id == art_id).delete()
         self.logger.debug(f'Deleted art with id {art_id}')
         self.s.commit()
+
+    @commands.command()
+    async def addart(self, ctx, link, *, description=""):
+        """Adds link to user gallery"""
+        if not link.lower().endswith(('.gif', '.png', '.jpeg', 'jpg')) and description == "":
+            await ctx.send("Add a description for non image entries!")
+        else:
+            id = self.add_art(ctx.author, link, description)
+            await ctx.send(f"Added art with id {id}!")
 
     @commands.command()
     async def delart(self, ctx, art_ids: commands.Greedy[int]):
@@ -83,9 +90,15 @@ class Gallery(commands.Cog):
         if artist.gallery:
             for idx, art in enumerate(artist.gallery):
                 embed = discord.Embed(color=discord.Color.dark_red())
-                embed.set_author(name=f"{member.display_name}'s Gallery Image {idx + 1}", icon_url=member.avatar_url)
-                embed.set_image(url=art.link)
-                embed.set_footer(text=f"Image id: {art.id}")
+                embed.set_author(name=f"{member.display_name}'s Gallery {idx + 1}", icon_url=member.avatar_url)
+                footer = f"Art id: {art.id}"
+                if art.link.lower().endswith(('.gif', '.png', '.jpeg', 'jpg')):
+                    embed.set_image(url=art.link)
+                    if art.description:
+                        footer+=f"\n{art.description}"
+                else:
+                    embed.description = f"{art.description}\n{art.link}"
+                embed.set_footer(text=footer)
                 await ctx.author.send(embed=embed)
         else:
             await ctx.author.send("This user doesnt have a gallery")

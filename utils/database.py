@@ -19,6 +19,7 @@ class Art(Base):
     id = Column(Integer, primary_key=True)
     artist = Column(Integer, ForeignKey('artist.userid'))
     link = Column(String)
+    description = Column(String)
     user = relationship("Artist", back_populates="gallery")
 
     def __repr__(self):
