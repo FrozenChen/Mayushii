@@ -102,7 +102,8 @@ class Gallery(commands.Cog):
                 await ctx.author.send(embed=embed)
         else:
             await ctx.author.send("This user doesnt have a gallery")
-
+    
+    @commands.has_permissions(kick_members=True)
     @commands.guild_only()
     @commands.command()
     async def delartist(self, ctx, member: discord.Member):
