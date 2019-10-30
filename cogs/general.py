@@ -3,6 +3,7 @@ from discord.ext import commands
 import subprocess
 import aiohttp
 
+
 class General(commands.Cog):
     """General commands for general use."""
 
@@ -14,11 +15,11 @@ class General(commands.Cog):
     async def about(self, ctx):
         """About Mayushii"""
         embed = discord.Embed(title="Mayushii", url="https://github.com/FrozenChen/Mayushii")
-        embed.description = "A bot for Nintendo Homebrew artistic channel."
+        embed.description = "A bot for ( ͡° ͜ʖ ͡°)."
         embed.set_thumbnail(url="https://files.frozenchen.me/vD7vM.png")
         await ctx.send(embed=embed)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_permissions(manage_guild=True)
     @commands.command()
     async def pull(self, ctx):
         """Pull changes from repo"""
@@ -26,7 +27,7 @@ class General(commands.Cog):
         subprocess.run(["git", "pull"])
         await self.bot.close()
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_permissions(manage_guild=True)
     @commands.command()
     async def load(self, ctx, cog: str):
         """Load a oog"""
@@ -38,7 +39,7 @@ class General(commands.Cog):
         except commands.ExtensionFailed:
             await ctx.send(f"Error occurred when loading {cog}")
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_permissions(manage_guild=True)
     @commands.command()
     async def unload(self, ctx, cog: str):
         """Unloads a cog"""
@@ -48,8 +49,8 @@ class General(commands.Cog):
         except Exception as exc:
             await ctx.send(f'Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```')
 
-    @commands.has_permissions(manage_channels=True)
-    @commands.command()
+    @commands.has_permissions(manage_guild=True)
+    @commands.command(aliases=["q"])
     async def quit(self, ctx):
         """This kills the bot"""
         await ctx.send("See you later!")
@@ -68,8 +69,7 @@ class General(commands.Cog):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as r:
                 if r.status != 200:
-                    await ctx.send("Failed to retrieve image!")
-                    js = await r.json()
+                    return await ctx.send("Failed to retrieve image!")
                 data = await r.read()
                 await self.bot.user.edit(avatar=data)
                 await ctx.send("Profile picture changed successfully.")
@@ -77,5 +77,7 @@ class General(commands.Cog):
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
 
+
 def setup(bot):
     bot.add_cog(General(bot))
+

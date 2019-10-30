@@ -3,9 +3,3 @@
 token =
 # Guild ID
 guild =
-[Art]
-#id of the art channel
-art_channel =
-[Vote]
-# How many days a user has to be member of the guild to be able to vote. Value in days.
-min_days =

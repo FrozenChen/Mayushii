@@ -4,12 +4,10 @@ from traceback import format_exception
 from sys import exc_info
 import logging
 import discord
-from utils import exceptions
 
 cogs = [
-    "cogs.gallery",
     "cogs.general",
-    "cogs.voting",
+    "cogs.roles"
 ]
 
 
@@ -21,7 +19,6 @@ class Mayushii(commands.Bot):
         self.logger.info('Loading config.ini')
         self.config = configparser.ConfigParser()
         self.config.read('config.ini')
-        self.load_cogs()
 
     @staticmethod
     def get_logger(self):
@@ -31,7 +28,7 @@ class Mayushii(commands.Bot):
         fh = logging.FileHandler('mayushii.log')
         ch.setLevel(logging.INFO)
         fh.setLevel(logging.NOTSET)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         ch.setFormatter(formatter)
         fh.setFormatter(formatter)
         logger.addHandler(ch)
@@ -40,6 +37,7 @@ class Mayushii(commands.Bot):
 
     async def on_ready(self):
         self.guild = bot.get_guild(int(self.config['Main']['guild']))
+        self.load_cogs()
         self.logger.info(f"Initialized on {self.guild.name}")
 
     def load_cogs(self):
@@ -51,7 +49,7 @@ class Mayushii(commands.Bot):
                 self.logger.error(f"Extension {cog} not found")
             except commands.ExtensionFailed as exc:
                 self.logger.error(f"Error occurred when loading {cog}")
-                self.logger.debug(f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+                self.logger.error(f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}")
 
     async def on_command_error(self, ctx, exc):
         logger = self.logger if ctx.cog is None else ctx.cog.logger
@@ -59,11 +57,8 @@ class Mayushii(commands.Bot):
         if isinstance(exc, commands.CommandNotFound):
             return
 
-        elif isinstance(exc, (commands.NoPrivateMessage, exceptions.TooNew, exceptions.NoOnGoingPoll)):
+        elif isinstance(exc, commands.NoPrivateMessage):
             await ctx.send(exc)
-
-        elif isinstance(exc, exceptions.BlackListed):
-            await ctx.author.send(exc)
 
         elif isinstance(exc, commands.CheckFailure):
             await ctx.send(f"You cannot use {ctx.command}.")
@@ -92,6 +87,6 @@ class Mayushii(commands.Bot):
         self.logger.error(f'Error occurred in {event}', exc_info=exc_info())
 
 
-bot = Mayushii(command_prefix="$", description="A bot for Nintendo Homebrew artistic channel")
+bot = Mayushii(command_prefix="$", description="A bot for dubious purposes")
 bot.run(bot.config['Main']['token'])
 
