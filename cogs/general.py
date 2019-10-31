@@ -30,7 +30,7 @@ class General(commands.Cog):
     @commands.has_permissions(manage_guild=True)
     @commands.command()
     async def load(self, ctx, cog: str):
-        """Load a oog"""
+        """Load a cog"""
         try:
             self.bot.load_extension(f"cogs.{cog}")
             await ctx.send(f"Loaded `{cog}``!")
