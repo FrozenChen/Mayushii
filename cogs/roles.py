@@ -14,6 +14,7 @@ class Roles(commands.Cog):
             '3d-kinky': None,
             '2d-kinky': None,
             'hardcore': None,
+            'lesbian': None,
             'gay': None,
             'furry': None
         }
