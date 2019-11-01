@@ -160,6 +160,28 @@ class Voting(commands.Cog):
 
     @commands.has_permissions(manage_channels=True)
     @poll.command()
+    async def close(self, ctx):
+        """Closes a poll"""
+        if self.current_poll is None:
+            await ctx.send("No ongoing poll")
+        self.current_poll.active = False
+        self.s.commit()
+        self.current_poll = None
+
+    @commands.command()
+    async def tally(self, ctx):
+        if self.current_poll is None:
+            await ctx.send("No ongoing poll")
+        result = self.count_votes(self.current_poll)
+        embed = discord.Embed()
+        msg = ""
+        for x in result.keys():
+            msg += f"{x}: {result[x]}   "
+        embed.add_field(name="Votes", value=msg, inline=False)
+        await ctx.send(embed=embed)
+
+    @commands.has_permissions(manage_channels=True)
+    @poll.command()
     async def list(self, ctx):
         polls = self.s.query(Poll).all()
         if polls:
