@@ -187,7 +187,7 @@ class Voting(commands.Cog):
             self.s.commit()
             await ctx.send("Poll deleted successfully")
 
-    @commands.has_permissions(change_nicknames=True)
+    @commands.has_permissions(manage_nicknames=True)
     @poll.command()
     async def info(self, ctx, poll_id: int = None):
         """Shows info about current poll or provided poll id"""

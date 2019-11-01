@@ -95,7 +95,7 @@ class Gallery(commands.Cog):
                 if art.link.lower().endswith(('.gif', '.png', '.jpeg', 'jpg')):
                     embed.set_image(url=art.link)
                     if art.description:
-                        footer+=f"\n{art.description}"
+                        footer += f"\n{art.description}"
                 else:
                     embed.description = f"{art.description}\n{art.link}"
                 embed.set_footer(text=footer)

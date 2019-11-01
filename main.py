@@ -31,7 +31,7 @@ class Mayushii(commands.Bot):
         fh = logging.FileHandler('mayushii.log')
         ch.setLevel(logging.INFO)
         fh.setLevel(logging.NOTSET)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s',datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
         ch.setFormatter(formatter)
         fh.setFormatter(formatter)
         logger.addHandler(ch)

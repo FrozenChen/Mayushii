@@ -3,6 +3,7 @@ from discord.ext import commands
 import subprocess
 import aiohttp
 
+
 class General(commands.Cog):
     """General commands for general use."""
 
@@ -29,7 +30,7 @@ class General(commands.Cog):
     @commands.has_permissions(manage_channels=True)
     @commands.command()
     async def load(self, ctx, cog: str):
-        """Load a oog"""
+        """Load a cog"""
         try:
             self.bot.load_extension(f"cogs.{cog}")
             await ctx.send(f"Loaded `{cog}``!")
@@ -68,14 +69,14 @@ class General(commands.Cog):
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as r:
                 if r.status != 200:
-                    await ctx.send("Failed to retrieve image!")
-                    js = await r.json()
+                    return await ctx.send("Failed to retrieve image!")
                 data = await r.read()
                 await self.bot.user.edit(avatar=data)
                 await ctx.send("Profile picture changed successfully.")
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
+
 
 def setup(bot):
     bot.add_cog(General(bot))
