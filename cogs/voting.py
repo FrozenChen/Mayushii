@@ -168,6 +168,7 @@ class Voting(commands.Cog):
         self.s.commit()
         self.current_poll = None
 
+    @commands.has_permissions(manage_nicknames=True)
     @commands.command()
     async def tally(self, ctx):
         if self.current_poll is None:
