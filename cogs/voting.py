@@ -163,7 +163,7 @@ class Voting(commands.Cog):
     async def close(self, ctx):
         """Closes a poll"""
         if self.current_poll is None:
-            await ctx.send("No ongoing poll")
+            return await ctx.send("No ongoing poll")
         self.current_poll.active = False
         self.s.commit()
         self.current_poll = None
