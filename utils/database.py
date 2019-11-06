@@ -36,7 +36,7 @@ class BlackList(Base):
 
 class Voter(Base):
     __tablename__ = "voters"
-    userid = Column(Integer, ForeignKey('artist.userid'), primary_key=True)
+    userid = Column(Integer, primary_key=True)
     votes = relationship("Vote", back_populates='user', cascade="all, delete, delete-orphan")
 
     def __repr__(self):

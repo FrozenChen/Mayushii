@@ -44,21 +44,6 @@ class Voting(commands.Cog):
         return True
 
     # Internal functions
-
-    def add_vote(self, user, option):
-        voter = self.s.query(Voter).get(user.id)
-        if voter is None:
-            voter = Voter(userid=user.id)
-            self.s.add(voter)
-        vote = self.s.query(Vote).get((voter.id, self.current_poll.id))
-        if vote is None:
-            self.logger.debug(f"Added vote")
-            self.s.add(Vote(voter_id=voter.userid), poll_id=self.current_poll.id, option=option)
-        else:
-            self.logger.debug(f"Modified vote")
-            vote.option = option
-        self.s.commit()
-
     def delete_vote(self, user):
         vote = self.s.query(Vote).get((user.id, self.current_poll.id))
         if vote is not None:
@@ -67,7 +52,20 @@ class Voting(commands.Cog):
 
     async def process_vote(self):
         ctx, option = await self.queue.get()
-        self.s.add(Vote(voter_id=ctx.author.id, poll_id=self.current_poll.id, option=option))
+        voterid = ctx.author.id
+        voter = self.s.query(Voter).get(voterid)
+        if voter is None:
+            voter = Voter(userid=voterid)
+            self.s.add(voter)
+        vote = self.s.query(Vote).filter(and_(Vote.voter_id == voter.userid, Vote.poll_id == self.current_poll.id)).scalar()
+        if vote is None:
+            self.logger.debug(f"Added vote")
+            await ctx.send("Vote added successfully!")
+            self.s.add(Vote(voter_id=voter.userid, poll_id=self.current_poll.id, option=option))
+        else:
+            self.logger.debug(f"Modified vote")
+            await ctx.send("Vote modified successfully!")
+            vote.option = option
         self.s.commit()
         self.queue.task_done()
 
@@ -107,15 +105,8 @@ class Voting(commands.Cog):
         if option not in self.parse_options(self.current_poll.options):
             await ctx.send("Invalid option")
             return
-        vote = self.s.query(Vote).filter(and_(Vote.voter_id == ctx.author.id, Vote.poll_id == self.current_poll.id)).scalar()
-        if vote is not None:
-            vote.option = option
-            self.s.commit()
-            await ctx.send("Vote modified successfully!")
-            return
         await self.queue.put((ctx, option))
         await self.process_vote()
-        await ctx.send("Vote added successfully!")
 
     @commands.guild_only()
     @commands.group()
