@@ -74,7 +74,7 @@ class Voting(commands.Cog):
     def count_votes(self, poll: Poll):
         result = {}
         for option in self.parse_options(poll.options):
-            c = self.s.query(Vote).filter(and_(Vote.poll_id == Poll.id, Vote.option == option)).count()
+            c = self.s.query(Vote).filter(and_(Vote.poll_id == poll.id, Vote.option == option)).count()
             result[option] = c
         return result
 
