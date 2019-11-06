@@ -220,6 +220,8 @@ class Voting(commands.Cog):
         if not poll:
             await ctx.send("No poll associated with provided ID")
         else:
+            if poll == self.current_poll:
+                self.current_poll = None
             self.s.delete(poll)
             self.s.commit()
             await ctx.send("Poll deleted successfully")
