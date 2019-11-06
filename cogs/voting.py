@@ -172,7 +172,7 @@ class Voting(commands.Cog):
     @commands.command()
     async def tally(self, ctx):
         if self.current_poll is None:
-            await ctx.send("No ongoing poll")
+            return await ctx.send("No ongoing poll")
         result = self.count_votes(self.current_poll)
         embed = discord.Embed()
         msg = ""
