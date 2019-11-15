@@ -87,7 +87,7 @@ class Gallery(commands.Cog):
         if not member:
             member = ctx.author
         artist = self.s.query(Artist).get(member.id)
-        if artist.gallery:
+        if artist and artist.gallery:
             for idx, art in enumerate(artist.gallery):
                 embed = discord.Embed(color=discord.Color.dark_red())
                 embed.set_author(name=f"{member.display_name}'s Gallery {idx + 1}", icon_url=member.avatar_url)
