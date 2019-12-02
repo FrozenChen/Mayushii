@@ -34,7 +34,7 @@ class Voting(commands.Cog):
 
     def not_new(ctx):
         if (datetime.now() - ctx.author.joined_at).days < int(ctx.bot.config['Vote']['min_days']):
-            raise TooNew(f"Only members older than {ctx.bot.config['Vote']['min_days']} can participate.")
+            raise TooNew(f"Only members older than {ctx.bot.config['Vote']['min_days']} days can participate.")
         return True
 
     def not_blacklisted(ctx):
@@ -102,6 +102,7 @@ class Voting(commands.Cog):
     @commands.command()
     async def vote(self, ctx, option: str):
         """Votes for a option in the current poll."""
+        await ctx.message.delete()
         if option not in self.parse_options(self.current_poll.options):
             await ctx.send("Invalid option")
             return
