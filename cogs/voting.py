@@ -60,11 +60,11 @@ class Voting(commands.Cog):
         vote = self.s.query(Vote).filter(and_(Vote.voter_id == voter.userid, Vote.poll_id == self.current_poll.id)).scalar()
         if vote is None:
             self.logger.debug(f"Added vote")
-            await ctx.send("Vote added successfully!")
+            await ctx.send("Vote added successfully!", delete_after=10)
             self.s.add(Vote(voter_id=voter.userid, poll_id=self.current_poll.id, option=option))
         else:
             self.logger.debug(f"Modified vote")
-            await ctx.send("Vote modified successfully!")
+            await ctx.send("Vote modified successfully!", delete_after=10)
             vote.option = option
         self.s.commit()
         self.queue.task_done()
