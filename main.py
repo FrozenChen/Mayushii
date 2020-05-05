@@ -10,6 +10,7 @@ cogs = [
     "cogs.gallery",
     "cogs.general",
     "cogs.voting",
+    "cogs.giveaway"
 ]
 
 
@@ -59,7 +60,7 @@ class Mayushii(commands.Bot):
         if isinstance(exc, commands.CommandNotFound):
             return
 
-        elif isinstance(exc, (commands.NoPrivateMessage, exceptions.TooNew, exceptions.NoOnGoingPoll)):
+        elif isinstance(exc, (commands.NoPrivateMessage, exceptions.TooNew, exceptions.NoOnGoingPoll, exceptions.NoOnGoingRaffle)):
             await ctx.send(exc)
 
         elif isinstance(exc, exceptions.BlackListed):

@@ -5,8 +5,8 @@ from sqlalchemy import create_engine, and_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from utils.database import Poll, Voter, Vote, BlackList
-from datetime import datetime
-from utils.exceptions import TooNew, NoOnGoingPoll, BlackListed
+from utils.exceptions import NoOnGoingPoll, BlackListed
+from utils.checks import not_new
 
 Base = declarative_base()
 
@@ -26,15 +26,9 @@ class Voting(commands.Cog):
         self.queue = asyncio.Queue()
 
     # Checks
-
     def ongoing_poll(ctx):
         if ctx.cog.current_poll is None:
             raise NoOnGoingPoll(f"There is no ongoing poll")
-        return True
-
-    def not_new(ctx):
-        if (datetime.now() - ctx.author.joined_at).days < int(ctx.bot.config['Vote']['min_days']):
-            raise TooNew(f"Only members older than {ctx.bot.config['Vote']['min_days']} days can participate.")
         return True
 
     def not_blacklisted(ctx):
