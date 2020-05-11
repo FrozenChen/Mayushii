@@ -100,6 +100,7 @@ class Giveaway(commands.Cog):
                 await ctx.send(f"Failed to send message to winner {user.mention}!")
         await ctx.send(f"Giveaway finished with {len(self.raffle['users'])} participants.")
         self.end = False
+        self.raffle = None
         os.rename('giveaway.json', f'giveaway.json.old-{datetime.now().strftime("%d-%b-%Y-%H-%M-%S)")}')
 
     @commands.guild_only()
