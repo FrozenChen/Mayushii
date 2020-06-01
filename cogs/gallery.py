@@ -24,7 +24,7 @@ class Gallery(commands.Cog):
             count = 0
             added = []
             for attachment in message.attachments:
-                if attachment.height:
+                if attachment.height and not message.content.startswith('.'):
                     art_id = self.add_art(message.author, attachment.url, message.content)
                     added.append(art_id)
                     count += 1
