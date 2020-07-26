@@ -190,6 +190,7 @@ class Raffle(commands.Cog):
     @commands.guild_only()
     @giveaway.group()
     async def blacklist(self, ctx):
+        """Commands for managing the blacklist"""
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
