@@ -1,27 +1,22 @@
+import discord
+import logging
+import json
+
 from discord.ext import commands
-import configparser
 from traceback import format_exception
 from sys import exc_info
-import logging
-import discord
 from utils import exceptions
 
-cogs = [
-    "cogs.gallery",
-    "cogs.general",
-    "cogs.voting",
-    "cogs.giveaway"
-]
+cogs = ["cogs.gallery", "cogs.general", "cogs.voting", "cogs.raffle"]
 
 
 class Mayushii(commands.Bot):
-
     def __init__(self, command_prefix, **options):
         super().__init__(command_prefix, **options)
         self.logger = self.get_logger(self)
-        self.logger.info('Loading config.ini')
-        self.config = configparser.ConfigParser()
-        self.config.read('config.ini')
+        self.logger.info("Loading config.json")
+        with open("config.json") as config:
+            self.config = json.load(config)
         self.load_cogs()
 
     @staticmethod
@@ -29,10 +24,13 @@ class Mayushii(commands.Bot):
         logger = logging.getLogger(self.__class__.__name__)
         logger.setLevel(logging.DEBUG)
         ch = logging.StreamHandler()
-        fh = logging.FileHandler('mayushii.log')
+        fh = logging.FileHandler("mayushii.log")
         ch.setLevel(logging.INFO)
         fh.setLevel(logging.NOTSET)
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(module)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
         ch.setFormatter(formatter)
         fh.setFormatter(formatter)
         logger.addHandler(ch)
@@ -40,19 +38,21 @@ class Mayushii(commands.Bot):
         return logger
 
     async def on_ready(self):
-        self.guild = bot.get_guild(int(self.config['Main']['guild']))
+        self.guild = bot.get_guild(self.config["guild"])
         self.logger.info(f"Initialized on {self.guild.name}")
 
     def load_cogs(self):
         for cog in cogs:
             try:
                 self.load_extension(cog)
-                self.logger.info(f'Loaded {cog}')
+                self.logger.info(f"Loaded {cog}")
             except commands.ExtensionNotFound:
                 self.logger.error(f"Extension {cog} not found")
             except commands.ExtensionFailed as exc:
                 self.logger.error(f"Error occurred when loading {cog}")
-                self.logger.debug(f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+                self.logger.debug(
+                    f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
+                )
 
     async def on_command_error(self, ctx, exc):
         logger = self.logger if ctx.cog is None else ctx.cog.logger
@@ -60,7 +60,15 @@ class Mayushii(commands.Bot):
         if isinstance(exc, commands.CommandNotFound):
             return
 
-        elif isinstance(exc, (commands.NoPrivateMessage, exceptions.TooNew, exceptions.NoOnGoingPoll, exceptions.NoOnGoingRaffle)):
+        elif isinstance(
+            exc,
+            (
+                commands.NoPrivateMessage,
+                exceptions.TooNew,
+                exceptions.NoOnGoingPoll,
+                exceptions.NoOnGoingRaffle,
+            ),
+        ):
             await ctx.send(exc)
 
         elif isinstance(exc, exceptions.BlackListed):
@@ -83,16 +91,21 @@ class Mayushii(commands.Bot):
             else:
                 await ctx.send(f"`{ctx.command}` caused an exception.")
                 logger.error(f"Exception occurred in {ctx.command}")
-                logger.debug(f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+                logger.debug(
+                    f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
+                )
         else:
             await ctx.send(f"Unhandled exception in `{ctx.command}`")
             logger.error(f"Unhandled exception occurred in {ctx.command}")
-            logger.debug(f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}")
+            logger.debug(
+                f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
+            )
 
     async def on_error(self, event, *args, **kwargs):
-        self.logger.error(f'Error occurred in {event}', exc_info=exc_info())
+        self.logger.error(f"Error occurred in {event}", exc_info=exc_info())
 
 
-bot = Mayushii(command_prefix="$", description="A bot for Nintendo Homebrew artistic channel")
-bot.run(bot.config['Main']['token'])
-
+bot = Mayushii(
+    command_prefix="$", description="A bot for Nintendo Homebrew artistic channel"
+)
+bot.run(bot.config["token"])

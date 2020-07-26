@@ -1,0 +1,7 @@
+{
+  "token" : "your token",
+  "guild" : "ID of the guild",
+  "art_channel" : "ID of the art channel",
+  "min_days" : "Minimum member age for polls and giveaways",
+  "default_roles" : "Roles to automatically be allowed in filtered giveaways"
+}

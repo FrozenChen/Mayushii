@@ -14,7 +14,9 @@ class General(commands.Cog):
     @commands.command()
     async def about(self, ctx):
         """About Mayushii"""
-        embed = discord.Embed(title="Mayushii", url="https://github.com/FrozenChen/Mayushii")
+        embed = discord.Embed(
+            title="Mayushii", url="https://github.com/FrozenChen/Mayushii"
+        )
         embed.description = "A bot for Nintendo Homebrew artistic channel."
         embed.set_thumbnail(url="https://files.frozenchen.me/vD7vM.png")
         await ctx.send(embed=embed)
@@ -47,7 +49,9 @@ class General(commands.Cog):
             self.bot.unload_extension(f"cogs.{cog}")
             await ctx.send(f"Unloaded {cog}!")
         except Exception as exc:
-            await ctx.send(f'Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```')
+            await ctx.send(
+                f"Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```"
+            )
 
     @commands.has_permissions(manage_channels=True)
     @commands.command()

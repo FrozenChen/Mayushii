@@ -1,44 +1,52 @@
 import asyncio
 import discord
+
 from discord.ext import commands
-from sqlalchemy import create_engine, and_
+from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from utils.database import Poll, Voter, Vote, BlackList
-from utils.exceptions import NoOnGoingPoll, BlackListed
-from utils.checks import not_new
+from utils.exceptions import NoOnGoingPoll
+from utils.checks import not_new, not_blacklisted
 
 Base = declarative_base()
 
 
 class Voting(commands.Cog):
     """Commands for managing a poll."""
+
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine('sqlite:///vote.db')
+        engine = create_engine("sqlite:///vote.db")
         session = sessionmaker(bind=engine)
         self.s = session()
-        Base.metadata.create_all(engine, tables=[Poll.__table__, Voter.__table__, Vote.__table__, BlackList.__table__])
+        Base.metadata.create_all(
+            engine,
+            tables=[
+                Poll.__table__,
+                Voter.__table__,
+                Vote.__table__,
+                BlackList.__table__,
+            ],
+        )
         self.s.commit()
         self.current_poll = self.s.query(Poll).filter_by(active=True).scalar()
-        self.logger.info(f"Loaded poll {self.current_poll.name}" if self.current_poll else "No poll loaded")
+        self.logger.info(
+            f"Loaded poll {self.current_poll.name}"
+            if self.current_poll
+            else "No poll loaded"
+        )
         self.queue = asyncio.Queue()
 
     # Checks
-    def ongoing_poll(ctx):
+    def ongoing_poll(ctx: commands.context):
         if ctx.cog.current_poll is None:
             raise NoOnGoingPoll(f"There is no ongoing poll")
         return True
 
-    def not_blacklisted(ctx):
-        if ctx.cog.s.query(BlackList).get(ctx.author.id):
-            ctx.message.delete()
-            raise BlackListed("You are blacklisted and cant use this command")
-        return True
-
     # Internal functions
-    def delete_vote(self, user):
+    def delete_vote(self, user: discord.Member):
         vote = self.s.query(Vote).get((user.id, self.current_poll.id))
         if vote is not None:
             self.s.delete(vote)
@@ -46,16 +54,23 @@ class Voting(commands.Cog):
 
     async def process_vote(self):
         ctx, option = await self.queue.get()
-        voterid = ctx.author.id
-        voter = self.s.query(Voter).get(voterid)
+        voter_id = ctx.author.id
+        voter = self.s.query(Voter).get(voter_id)
         if voter is None:
-            voter = Voter(userid=voterid)
+            voter = Voter(userid=voter_id)
             self.s.add(voter)
-        vote = self.s.query(Vote).filter(and_(Vote.voter_id == voter.userid, Vote.poll_id == self.current_poll.id)).scalar()
+        vote = (
+            self.s.query(Vote)
+            .filter_by(voter_id=voter.userid, poll_id=self.current_poll.id)
+            .scalar()
+        )
+
         if vote is None:
             self.logger.debug(f"Added vote")
             await ctx.send("Vote added successfully!", delete_after=10)
-            self.s.add(Vote(voter_id=voter.userid, poll_id=self.current_poll.id, option=option))
+            self.s.add(
+                Vote(voter_id=voter.userid, poll_id=self.current_poll.id, option=option)
+            )
         else:
             self.logger.debug(f"Modified vote")
             await ctx.send("Vote modified successfully!", delete_after=10)
@@ -66,11 +81,11 @@ class Voting(commands.Cog):
     def count_votes(self, poll: Poll):
         result = {}
         for option in self.parse_options(poll.options):
-            c = self.s.query(Vote).filter(and_(Vote.poll_id == poll.id, Vote.option == option)).count()
+            c = self.s.query(Vote).filter_by(poll_id=poll.id, option=option).count()
             result[option] = c
         return result
 
-    def create_poll(self, name, link, options: str):
+    def create_poll(self, name, link: str, options: str):
         poll = Poll(name=name, link=link, options=options)
         self.s.add(poll)
         self.s.commit()
@@ -112,12 +127,16 @@ class Voting(commands.Cog):
 
     async def wait_for_answer(self, ctx):
         try:
-            msg = await self.bot.wait_for('message', timeout=15, check=lambda message: message.author == ctx.author
-                                          and ('yes' in message.content or 'no' in message.content))
+            msg = await self.bot.wait_for(
+                "message",
+                timeout=15,
+                check=lambda message: message.author == ctx.author
+                and ("yes" in message.content or "no" in message.content),
+            )
         except asyncio.TimeoutError:
             await ctx.send("You took too long 🐢")
             return None
-        return 'yes' in msg.content
+        return "yes" in msg.content
 
     @commands.has_permissions(manage_channels=True)
     @poll.command()
@@ -126,12 +145,18 @@ class Voting(commands.Cog):
         embed = discord.Embed(title="Proposed Poll", color=discord.Color.green())
         embed.add_field(name="Name", value=name, inline=False)
         embed.add_field(name="Link", value=link, inline=False)
-        embed.add_field(name="Options", value=' '.join(self.parse_options(options)), inline=False)
-        await ctx.send("Say `yes` to confirm poll creation, `no` to cancel", embed=embed)
+        embed.add_field(
+            name="Options", value=" ".join(self.parse_options(options)), inline=False
+        )
+        await ctx.send(
+            "Say `yes` to confirm poll creation, `no` to cancel", embed=embed
+        )
 
         if await self.wait_for_answer(ctx):
             poll = self.create_poll(name, link, options)
-            await ctx.send(f"Poll created successfully with id {poll.id}\nDo you want to activate it now?")
+            await ctx.send(
+                f"Poll created successfully with id {poll.id}\nDo you want to activate it now?"
+            )
             if await self.wait_for_answer(ctx):
                 if self.current_poll:
                     self.current_poll.active = False
@@ -188,11 +213,13 @@ class Voting(commands.Cog):
         if polls:
             embed = discord.Embed(title="Poll List")
             for poll in polls:
-                msg = f"id={poll.id}\n" \
-                      f"link={poll.link}\n" \
-                      f"option={poll.options}\n" \
-                      f"active={poll.active}\n" \
-                      f"votes={len(poll.votes)}\n"
+                msg = (
+                    f"id={poll.id}\n"
+                    f"link={poll.link}\n"
+                    f"option={poll.options}\n"
+                    f"active={poll.active}\n"
+                    f"votes={len(poll.votes)}\n"
+                )
                 embed.add_field(name=poll.name, value=msg)
             await ctx.send(embed=embed)
         else:
@@ -226,7 +253,11 @@ class Voting(commands.Cog):
         embed = discord.Embed(title=poll.name, color=discord.Color.blurple())
         embed.add_field(name="ID", value=poll.id, inline=False)
         embed.add_field(name="Link", value=poll.link, inline=False)
-        embed.add_field(name="Options", value=" ".join(self.parse_options(poll.options)), inline=False)
+        embed.add_field(
+            name="Options",
+            value=" ".join(self.parse_options(poll.options)),
+            inline=False,
+        )
         result = self.count_votes(poll)
         msg = ""
         for x in result.keys():
