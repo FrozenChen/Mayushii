@@ -9,6 +9,8 @@ from sqlalchemy import create_engine
 from utils.checks import not_new, not_blacklisted
 from utils.database import Giveaway, Entry, GiveawayRole, BlackList
 from utils.exceptions import NoOnGoingRaffle
+from utils.utilities import wait_for_answer
+from typing import List
 
 Base = declarative_base()
 
@@ -35,10 +37,16 @@ class Raffle(commands.Cog):
         self.raffle = self.s.query(Giveaway).filter_by(ongoing=True).scalar()
         self.queue = asyncio.Queue()
 
+    # checks
     def ongoing_raffle(ctx: commands.Context):
         if ctx.cog.raffle and ctx.cog.raffle.ongoing:
             return True
         raise NoOnGoingRaffle("There is no ongoing raffle.")
+
+    # internal functions
+    async def queue_empty(self):
+        while not self.queue.empty():
+            pass
 
     async def process_entry(self):
         ctx = await self.queue.get()
@@ -57,6 +65,17 @@ class Raffle(commands.Cog):
         await ctx.send(f"{ctx.author.mention} now you are participating in the raffle!")
         self.queue.task_done()
 
+    def create_raffle(self, name: str, winners: int, roles: List[int]):
+        raffle = Giveaway(name=name, win_count=winners)
+        self.s.add(raffle)
+        self.s.commit()
+        if roles:
+            self.s.add_all(
+                [GiveawayRole(id=role_id, giveaway=raffle.id) for role_id in roles]
+            )
+        self.s.commit()
+        return raffle
+
     @commands.check(not_blacklisted)
     @commands.check(not_new)
     @commands.check(ongoing_raffle)
@@ -66,39 +85,61 @@ class Raffle(commands.Cog):
         await self.queue.put(ctx)
         await self.process_entry()
 
+    @commands.guild_only()
+    @commands.group(aliases=["raffle"])
+    async def giveaway(self, ctx):
+        """Giveaway related commands."""
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
     @commands.has_permissions(manage_channels=True)
     @commands.guild_only()
-    @commands.command()
-    async def start(
+    @giveaway.command()
+    async def create(
         self,
         ctx,
         name: str,
         winners: int = 1,
         roles: commands.Greedy[discord.Role] = None,
     ):
+        """Creates a giveaway"""
         if self.raffle:
             return await ctx.send("There is an already ongoing giveaway!")
-        self.raffle = Giveaway(name=name, win_count=winners)
-        self.s.add(self.raffle)
-        self.s.commit()
+        embed = discord.Embed(title="Proposed Giveaway", color=discord.Color.purple())
+        embed.add_field(name="Name", value=name, inline=False)
+        embed.add_field(name="Number of winners", value=str(winners), inline=False)
         if roles:
-            self.s.add_all(
-                [GiveawayRole(id=role.id, giveaway=self.raffle.id) for role in roles]
+            embed.add_field(
+                name="Roles accepted",
+                value=" ".join([role.name for role in roles]),
+                inline=False,
             )
-            self.s.add_all(
-                [
-                    GiveawayRole(id=role_id, giveaway=self.raffle.id)
-                    for role_id in self.bot.config["default_roles"]
-                ]
-            )
-        self.s.commit()
         await ctx.send(
-            f"Started giveaway with {winners} possible winners! Use `{self.bot.command_prefix}join`to join"
+            "Say `yes` to confirm giveaway creation, `no` to cancel", embed=embed
         )
+        if await wait_for_answer(ctx):
+            self.raffle = self.create_raffle(
+                name, winners, [role.id for role in roles] if roles else []
+            )
+            await ctx.send(
+                f"Started giveaway {name} with {winners} possible winners! Use `{self.bot.command_prefix}join`to join"
+            )
+        else:
+            await ctx.send("Alright then.")
 
-    async def queue_empty(self):
-        while not self.queue.empty():
-            pass
+    @commands.has_permissions(manage_channels=True)
+    @commands.check(ongoing_raffle)
+    @commands.guild_only()
+    @giveaway.command()
+    async def cancel(self, ctx):
+        """Cancels current giveaway"""
+        await ctx.send("Are you sure you want to cancel current giveaway?")
+        if await wait_for_answer(ctx):
+            self.raffle.ongoing = False
+            self.raffle = None
+            self.s.commit()
+            return await ctx.send("Giveaway cancelled.")
+        await ctx.send("And the raffle continues.")
 
     def get_winner(self):
         while len(self.raffle.entries) >= 1:
@@ -111,9 +152,9 @@ class Raffle(commands.Cog):
         return None
 
     @commands.has_permissions(manage_channels=True)
-    @commands.guild_only()
     @commands.check(ongoing_raffle)
-    @commands.command()
+    @commands.guild_only()
+    @giveaway.command()
     async def finish(self, ctx):
         self.raffle.ongoing = False
         self.s.commit()
@@ -147,8 +188,13 @@ class Raffle(commands.Cog):
 
     @commands.has_permissions(manage_nicknames=True)
     @commands.guild_only()
-    @commands.command()
-    async def denygiveaway(self, ctx, member: discord.Member):
+    @giveaway.group()
+    async def blacklist(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @blacklist.command()
+    async def add(self, ctx, member: discord.Member):
         """Blacklist user"""
         if self.s.query(BlackList).get(member.id):
             await ctx.send(f"{member} is already in the blacklist")
@@ -157,27 +203,24 @@ class Raffle(commands.Cog):
         self.s.commit()
         await ctx.send(f"Added {member} to the blacklist")
 
-    @commands.has_permissions(manage_nicknames=True)
-    @commands.guild_only()
-    @commands.command()
-    async def allowgiveaway(self, ctx, member: discord.Member):
+    @blacklist.command()
+    async def remove(self, ctx, member: discord.Member):
         """Removes user from Blacklist"""
         if not (entry := self.s.query(BlackList).get(member.id)):
             await ctx.send(f"{member} is not in the blacklist.")
             return
-        self.s.remove(entry)
+        self.s.delete(entry)
         self.s.commit()
         await ctx.send(f"Removed {member} from the blacklist")
 
-    @commands.guild_only()
-    @commands.group()
-    async def modify(self, ctx):
-        if ctx.invoked_subcommand is None:
-            await ctx.send("No parameter selected.")
-
-    @commands.has_permissions(manage_channels=True)
     @commands.check(ongoing_raffle)
     @commands.guild_only()
+    @giveaway.group()
+    async def modify(self, ctx):
+        if ctx.invoked_subcommand is None:
+            await ctx.send_help(ctx.command)
+
+    @commands.has_permissions(manage_channels=True)
     @modify.command()
     async def winner_count(self, ctx, value: int):
         """Modify a parameter of the raffle"""

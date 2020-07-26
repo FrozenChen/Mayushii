@@ -8,6 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from utils.database import Poll, Voter, Vote, BlackList
 from utils.exceptions import NoOnGoingPoll
 from utils.checks import not_new, not_blacklisted
+from utils.utilities import wait_for_answer
 
 Base = declarative_base()
 
@@ -125,19 +126,6 @@ class Voting(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    async def wait_for_answer(self, ctx):
-        try:
-            msg = await self.bot.wait_for(
-                "message",
-                timeout=15,
-                check=lambda message: message.author == ctx.author
-                and ("yes" in message.content or "no" in message.content),
-            )
-        except asyncio.TimeoutError:
-            await ctx.send("You took too long 🐢")
-            return None
-        return "yes" in msg.content
-
     @commands.has_permissions(manage_channels=True)
     @poll.command()
     async def create(self, ctx, name, link, *, options):
@@ -152,12 +140,12 @@ class Voting(commands.Cog):
             "Say `yes` to confirm poll creation, `no` to cancel", embed=embed
         )
 
-        if await self.wait_for_answer(ctx):
+        if await wait_for_answer(ctx):
             poll = self.create_poll(name, link, options)
             await ctx.send(
                 f"Poll created successfully with id {poll.id}\nDo you want to activate it now?"
             )
-            if await self.wait_for_answer(ctx):
+            if await wait_for_answer(ctx):
                 if self.current_poll:
                     self.current_poll.active = False
                 poll.active = True
