@@ -51,9 +51,15 @@ class Raffle(commands.Cog):
     async def process_entry(self):
         ctx = await self.queue.get()
         if self.raffle.roles:
-            if not any(
-                self.s.query(GiveawayRole).get((role.id, self.raffle.id))
-                for role in ctx.author.roles
+            if not (
+                any(
+                    discord.utils.get(ctx.author.roles, id=role.id)
+                    for role in self.raffle.roles
+                )
+                or any(
+                    discord.utils.get(ctx.author.roles, id=role_id)
+                    for role_id in self.bot.config["default_roles"]
+                )
             ):
                 return await ctx.send("You are not allowed to participate!")
         user_id = ctx.author.id
