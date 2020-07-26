@@ -35,6 +35,14 @@ class Raffle(commands.Cog):
         )
         self.s.commit()
         self.raffle = self.s.query(Giveaway).filter_by(ongoing=True).scalar()
+        self.roles = []
+        if self.raffle and self.raffle.roles:
+            for role in self.raffle.roles:
+                if (drole := discord.utils.get(bot.guild.roles, id=role.id)) is None:
+                    self.s.query(GiveawayRole).get((role.id, self.raffle.id)).delete()
+                    self.s.commit()
+                else:
+                    self.roles.append(drole)
         self.queue = asyncio.Queue()
 
     # checks
@@ -52,10 +60,7 @@ class Raffle(commands.Cog):
         ctx = await self.queue.get()
         if self.raffle.roles:
             if not (
-                any(
-                    discord.utils.get(ctx.author.roles, id=role.id)
-                    for role in self.raffle.roles
-                )
+                any(role in ctx.author.roles for role in self.roles)
                 or any(
                     discord.utils.get(ctx.author.roles, id=role_id)
                     for role_id in self.bot.config["default_roles"]
@@ -79,8 +84,22 @@ class Raffle(commands.Cog):
             self.s.add_all(
                 [GiveawayRole(id=role_id, giveaway=raffle.id) for role_id in roles]
             )
-        self.s.commit()
+            self.s.commit()
+            self.roles = [
+                discord.utils.get(self.bot.guild.roles, id=role_id)
+                for role_id in self.raffle.roles
+            ]
         return raffle
+
+    def get_winner(self):
+        while len(self.raffle.entries) >= 1:
+            entry = random.choice(self.raffle.entries)
+            if (winner := self.bot.guild.get_member(entry.id)) is not None:
+                entry.winner = True
+                self.s.commit()
+                return winner
+            self.s.delete(entry)
+        return None
 
     @commands.check(not_blacklisted)
     @commands.check(not_new)
@@ -117,7 +136,7 @@ class Raffle(commands.Cog):
         if roles:
             embed.add_field(
                 name="Roles accepted",
-                value=" ".join([role.name for role in roles]),
+                value=" ".join(role.name for role in roles),
                 inline=False,
             )
         await ctx.send(
@@ -137,6 +156,25 @@ class Raffle(commands.Cog):
     @commands.check(ongoing_raffle)
     @commands.guild_only()
     @giveaway.command()
+    async def info(self, ctx):
+        """Shows information about current giveaway"""
+        embed = discord.Embed()
+        embed.add_field(name="ID", value=self.raffle.id, inline=False)
+        embed.add_field(name="Name", value=self.raffle.name, inline=False)
+        embed.add_field(
+            name="Allowed Roles",
+            value="\n".join(role.name for role in self.roles),
+            inline=False,
+        )
+        embed.add_field(
+            name="Number of entries", value=str(len(self.raffle.entries)), inline=False
+        )
+        await ctx.send(embed=embed)
+
+    @commands.has_permissions(manage_channels=True)
+    @commands.check(ongoing_raffle)
+    @commands.guild_only()
+    @giveaway.command()
     async def cancel(self, ctx):
         """Cancels current giveaway"""
         await ctx.send("Are you sure you want to cancel current giveaway?")
@@ -146,16 +184,6 @@ class Raffle(commands.Cog):
             self.s.commit()
             return await ctx.send("Giveaway cancelled.")
         await ctx.send("And the raffle continues.")
-
-    def get_winner(self):
-        while len(self.raffle.entries) >= 1:
-            entry = random.choice(self.raffle.entries)
-            if (winner := self.bot.guild.get_member(entry.id)) is not None:
-                entry.winner = True
-                self.s.commit()
-                return winner
-            self.s.delete(entry)
-        return None
 
     @commands.has_permissions(manage_channels=True)
     @commands.check(ongoing_raffle)

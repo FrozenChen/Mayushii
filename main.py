@@ -17,7 +17,6 @@ class Mayushii(commands.Bot):
         self.logger.info("Loading config.json")
         with open("config.json") as config:
             self.config = json.load(config)
-        self.load_cogs()
 
     @staticmethod
     def get_logger(self):
@@ -39,6 +38,7 @@ class Mayushii(commands.Bot):
 
     async def on_ready(self):
         self.guild = bot.get_guild(self.config["guild"])
+        self.load_cogs()
         self.logger.info(f"Initialized on {self.guild.name}")
 
     def load_cogs(self):
