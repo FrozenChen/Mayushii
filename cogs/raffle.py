@@ -161,11 +161,12 @@ class Raffle(commands.Cog):
         embed = discord.Embed()
         embed.add_field(name="ID", value=self.raffle.id, inline=False)
         embed.add_field(name="Name", value=self.raffle.name, inline=False)
-        embed.add_field(
-            name="Allowed Roles",
-            value="\n".join(role.name for role in self.roles),
-            inline=False,
-        )
+        if self.roles:
+            embed.add_field(
+                name="Allowed Roles",
+                value="\n".join(role.name for role in self.roles),
+                inline=False,
+            )
         embed.add_field(
             name="Number of entries", value=str(len(self.raffle.entries)), inline=False
         )
