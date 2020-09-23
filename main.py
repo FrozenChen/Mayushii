@@ -106,6 +106,6 @@ class Mayushii(commands.Bot):
 
 
 bot = Mayushii(
-    command_prefix="$", description="A bot for Nintendo Homebrew artistic channel"
+    command_prefix="$", max_messages=None, description="A bot for Nintendo Homebrew artistic channel"
 )
 bot.run(bot.config["token"])
