@@ -61,7 +61,7 @@ class Community(commands.Cog):
             await ctx.author.remove_roles(role)
         except discord.errors.Forbidden:
             return await ctx.send("💢 I don't have permission to do this.")
-        await ctx.send(f"You now have the {role.name} role!")
+        await ctx.send(f"{ctx.author.mention} The role has been removed!")
 
     @commands.group(aliases=["cr"])
     async def communityrole(self, ctx):
