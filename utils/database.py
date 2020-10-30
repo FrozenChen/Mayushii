@@ -113,3 +113,11 @@ class Entry(Base):
 
     def __repr__(self):
         return f"<GiveawayEntry id={self.id}, giveaway={self.giveaway}, winner={self.winner}>"
+
+
+class CommunityRole(Base):
+    __tablename__ = "commnunity_roles"
+    id = Column(Integer, primary_key=True)
+    name = Column(String)
+    alias = Column(String)
+    description = Column(String)

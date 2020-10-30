@@ -7,7 +7,7 @@ from traceback import format_exception
 from sys import exc_info
 from utils import exceptions
 
-cogs = ["cogs.gallery", "cogs.general", "cogs.voting", "cogs.raffle"]
+cogs = ["cogs.gallery", "cogs.general", "cogs.voting", "cogs.raffle", "cogs.community"]
 
 
 class Mayushii(commands.Bot):
@@ -84,6 +84,11 @@ class Mayushii(commands.Bot):
         elif isinstance(exc, commands.MissingRequiredArgument):
             await ctx.send(exc)
             await ctx.send_help(ctx.command)
+        elif isinstance(exc, discord.ext.commands.errors.CommandOnCooldown):
+            await ctx.send(
+                f"This command is on cooldown, try again in {exc.retry_after:.2f}s.",
+                delete_after=10,
+            )
 
         elif isinstance(exc, commands.CommandInvokeError):
             if isinstance(exc.original, discord.Forbidden):
