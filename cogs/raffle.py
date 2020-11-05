@@ -117,7 +117,7 @@ class Raffle(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.guild_only()
     @giveaway.command()
     async def create(
@@ -152,7 +152,7 @@ class Raffle(commands.Cog):
         else:
             await ctx.send("Alright then.")
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.check(ongoing_raffle)
     @commands.guild_only()
     @giveaway.command()
@@ -172,7 +172,7 @@ class Raffle(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.check(ongoing_raffle)
     @commands.guild_only()
     @giveaway.command()
@@ -186,7 +186,7 @@ class Raffle(commands.Cog):
             return await ctx.send("Giveaway cancelled.")
         await ctx.send("And the raffle continues.")
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.check(ongoing_raffle)
     @commands.guild_only()
     @giveaway.command()
@@ -221,7 +221,7 @@ class Raffle(commands.Cog):
         )
         self.raffle = None
 
-    @commands.has_permissions(manage_nicknames=True)
+    @commands.has_guild_permissions(manage_nicknames=True)
     @commands.guild_only()
     @giveaway.group()
     async def blacklist(self, ctx):
@@ -256,7 +256,7 @@ class Raffle(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @modify.command()
     async def winner_count(self, ctx, value: int):
         """Modify a parameter of the raffle"""

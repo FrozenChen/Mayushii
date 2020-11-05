@@ -68,7 +68,7 @@ class Community(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @communityrole.command()
     async def add(self, ctx, alias: str, role: discord.Role, *, description: str):
         """Adds a server role as a community role"""
@@ -89,7 +89,7 @@ class Community(commands.Cog):
         self.roles = self.s.query(CommunityRole).all()
         await ctx.send("Added community role succesfully")
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @communityrole.command(aliases=["delete"])
     async def remove(self, ctx, role: discord.Role):
         """Removes a server role from the community roles"""

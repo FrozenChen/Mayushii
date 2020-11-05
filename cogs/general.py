@@ -21,7 +21,7 @@ class General(commands.Cog):
         embed.set_thumbnail(url="https://files.frozenchen.me/vD7vM.png")
         await ctx.send(embed=embed)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
     async def pull(self, ctx):
         """Pull changes from repo"""
@@ -29,7 +29,7 @@ class General(commands.Cog):
         subprocess.run(["git", "pull"])
         await self.bot.close()
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
     async def load(self, ctx, cog: str):
         """Load a cog"""
@@ -41,7 +41,7 @@ class General(commands.Cog):
         except commands.ExtensionFailed:
             await ctx.send(f"Error occurred when loading {cog}")
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
     async def unload(self, ctx, cog: str):
         """Unloads a cog"""
@@ -53,14 +53,14 @@ class General(commands.Cog):
                 f"Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```"
             )
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @commands.command()
     async def quit(self, ctx):
         """This kills the bot"""
         await ctx.send("See you later!")
         await self.bot.close()
 
-    @commands.has_permissions(manage_guild=True)
+    @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
     async def changepfp(self, ctx, url: str = ""):
         """Change bot profile picture"""

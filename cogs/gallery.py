@@ -120,7 +120,7 @@ class Gallery(commands.Cog):
         else:
             await ctx.author.send("This user doesnt have a gallery")
 
-    @commands.has_permissions(kick_members=True)
+    @commands.has_guild_permissions(kick_members=True)
     @commands.guild_only()
     @commands.command()
     async def delartist(self, ctx, member: discord.Member):
@@ -133,7 +133,7 @@ class Gallery(commands.Cog):
         self.s.commit()
         await ctx.send("Artist deleted")
 
-    @commands.has_permissions(manage_nicknames=True)
+    @commands.has_guild_permissions(manage_nicknames=True)
     @commands.guild_only()
     @commands.command()
     async def blackart(self, ctx, member: discord.Member):
@@ -145,7 +145,7 @@ class Gallery(commands.Cog):
         self.s.commit()
         await ctx.send(f"Added {member} to the blacklist")
 
-    @commands.has_permissions(manage_nicknames=True)
+    @commands.has_guild_permissions(manage_nicknames=True)
     @commands.guild_only()
     @commands.command()
     async def whiteart(self, ctx, member: discord.Member):

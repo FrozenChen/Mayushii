@@ -126,7 +126,7 @@ class Voting(commands.Cog):
         if ctx.invoked_subcommand is None:
             await ctx.send_help(ctx.command)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @poll.command()
     async def create(self, ctx, name, link, *, options):
         """Creates a poll"""
@@ -156,7 +156,7 @@ class Voting(commands.Cog):
         else:
             await ctx.send("Alright then.")
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @poll.command()
     async def activate(self, ctx, poll_id: int):
         """Activates a poll"""
@@ -171,7 +171,7 @@ class Voting(commands.Cog):
         await ctx.send(f"Enabled poll {poll.name}")
         self.current_poll = poll
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @poll.command()
     async def close(self, ctx):
         """Closes a poll"""
@@ -181,7 +181,7 @@ class Voting(commands.Cog):
         self.s.commit()
         self.current_poll = None
 
-    @commands.has_permissions(manage_nicknames=True)
+    @commands.has_guild_permissions(manage_nicknames=True)
     @commands.command()
     async def tally(self, ctx):
         if self.current_poll is None:
@@ -194,7 +194,7 @@ class Voting(commands.Cog):
         embed.add_field(name="Votes", value=msg, inline=False)
         await ctx.send(embed=embed)
 
-    @commands.has_permissions(manage_channels=True)
+    @commands.has_guild_permissions(manage_channels=True)
     @poll.command()
     async def list(self, ctx):
         polls = self.s.query(Poll).all()
@@ -213,7 +213,7 @@ class Voting(commands.Cog):
         else:
             await ctx.send("No polls to show!")
 
-    @commands.has_permissions(manage_guild=True)
+    @commands.has_guild_permissions(manage_guild=True)
     @poll.command()
     async def delete(self, ctx, poll_id: int):
         """Deletes a poll"""
@@ -227,7 +227,7 @@ class Voting(commands.Cog):
             self.s.commit()
             await ctx.send("Poll deleted successfully")
 
-    @commands.has_permissions(manage_nicknames=True)
+    @commands.has_guild_permissions(manage_nicknames=True)
     @poll.command()
     async def info(self, ctx, poll_id: int = None):
         """Shows info about current poll or provided poll id"""
