@@ -21,7 +21,7 @@ class Raffle(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///giveaway.db")
+        engine = create_engine("sqlite:///data/giveaway.db")
         session = sessionmaker(bind=engine)
         self.s = session()
         Base.metadata.create_all(

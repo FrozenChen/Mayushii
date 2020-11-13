@@ -15,7 +15,7 @@ class Mayushii(commands.Bot):
         super().__init__(command_prefix, **options)
         self.logger = self.get_logger(self)
         self.logger.info("Loading config.json")
-        with open("config.json") as config:
+        with open("data/config.json") as config:
             self.config = json.load(config)
 
     @staticmethod

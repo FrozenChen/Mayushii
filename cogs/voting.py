@@ -19,7 +19,7 @@ class Voting(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///vote.db")
+        engine = create_engine("sqlite:///data/vote.db")
         session = sessionmaker(bind=engine)
         self.s = session()
         Base.metadata.create_all(
