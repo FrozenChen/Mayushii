@@ -110,10 +110,9 @@ class Mayushii(commands.Bot):
         self.logger.error(f"Error occurred in {event}", exc_info=exc_info())
 
 
-intents = discord.Intents(guilds=True, members=True, messages=True)
+intents = discord.Intents(guilds=True, members=True, messages=True, reactions=True)
 bot = Mayushii(
     command_prefix="$",
-    max_messages=None,
     description="A bot for Nintendo Homebrew artistic channel",
     intents=intents,
 )

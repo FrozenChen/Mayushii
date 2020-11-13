@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from discord.ext import commands
 from sqlalchemy import create_engine
@@ -102,7 +104,11 @@ class Gallery(commands.Cog):
             member = ctx.author
         artist = self.s.query(Artist).get(member.id)
         if artist and artist.gallery:
-            for idx, art in enumerate(artist.gallery):
+            idx = 0
+            total = len(artist.gallery)
+            message = None
+            while True:
+                art = artist.gallery[idx]
                 embed = discord.Embed(color=discord.Color.dark_red())
                 embed.set_author(
                     name=f"{member.display_name}'s Gallery {idx + 1}",
@@ -113,12 +119,36 @@ class Gallery(commands.Cog):
                     embed.set_image(url=art.link)
                     if art.description:
                         footer += f"\n{art.description}"
+
                 else:
                     embed.description = f"{art.description}\n{art.link}"
+                footer += f"\n{idx + 1}/{total}"
                 embed.set_footer(text=footer)
-                await ctx.author.send(embed=embed)
+                if not message:
+                    message = await ctx.author.send(embed=embed)
+                else:
+                    await message.edit(embed=embed)
+                await message.add_reaction("👈")
+                await message.add_reaction("👉")
+                try:
+                    react, user = await ctx.bot.wait_for(
+                        "reaction_add",
+                        check=lambda reaction, user: reaction.message == message
+                        and str(reaction.emoji) in ["👈", "👉"]
+                        and user != self.bot.user,
+                        timeout=20.0,
+                    )
+                    if str(react) == "👈":
+                        idx = (idx - 1) % total
+                    else:
+                        idx = (idx + 1) % total
+                except asyncio.TimeoutError:
+                    return
         else:
-            await ctx.author.send("This user doesnt have a gallery")
+            try:
+                await ctx.author.send("This user doesnt have a gallery")
+            except discord.Forbidden:
+                pass
 
     @commands.has_guild_permissions(kick_members=True)
     @commands.guild_only()
