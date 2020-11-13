@@ -13,7 +13,7 @@ class Gallery(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///gallery.db")
+        engine = create_engine("sqlite:///data/gallery.db")
         session = sessionmaker(bind=engine)
         self.s = session()
         Base.metadata.create_all(

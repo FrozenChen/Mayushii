@@ -12,7 +12,7 @@ class Community(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///community.db")
+        engine = create_engine("sqlite:///data/community.db")
         session = sessionmaker(bind=engine)
         self.s = session()
         Base.metadata.create_all(engine, tables=[CommunityRole.__table__])
