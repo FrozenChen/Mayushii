@@ -1,6 +1,7 @@
+import aiohttp
 import asyncio
-
 import discord
+
 from discord.ext import commands
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -180,16 +181,32 @@ class Gallery(commands.Cog):
     @commands.command()
     async def whiteart(self, ctx, member: discord.Member):
         """Removes user from Blacklist"""
-        """Removes user from Blacklist"""
         if not (entry := self.s.query(BlackList).get(member.id)):
             await ctx.send(f"{member} is not in the blacklist.")
             return
-        self.s.remove(entry)
+        self.s.delete(entry)
         self.s.commit()
         await ctx.send(f"Removed {member} from the blacklist")
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {exc}")
+
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.command()
+    async def cleanup(self, ctx):
+        todelete = []
+        for art in self.s.query(Art).all():
+            async with aiohttp.ClientSession() as session:
+                async with session.head(art.link) as resp:
+                    if resp.status == 403:
+                        todelete.append(art)
+        if todelete:
+            for art in todelete:
+                self.s.delete(art)
+            self.s.commit()
+            await ctx.send(f"Deleted {len(todelete)} invalid images!")
+        else:
+            await ctx.send("No invalid images found!")
 
 
 def setup(bot):
