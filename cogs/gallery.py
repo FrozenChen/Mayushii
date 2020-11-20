@@ -197,9 +197,12 @@ class Gallery(commands.Cog):
         todelete = []
         for art in self.s.query(Art).all():
             async with aiohttp.ClientSession() as session:
-                async with session.head(art.link) as resp:
-                    if resp.status == 403:
-                        todelete.append(art)
+                try:
+                    async with session.head(art.link) as resp:
+                        if resp.status == 403:
+                            todelete.append(art)
+                except aiohttp.InvalidURL:
+                    todelete.append(art)
         if todelete:
             for art in todelete:
                 self.s.delete(art)
