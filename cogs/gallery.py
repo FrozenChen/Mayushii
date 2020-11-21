@@ -31,11 +31,11 @@ class Gallery(commands.Cog):
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if not self.is_enabled(message.guild):
-            return
-        if message.channel.id == self.art_channel[message.guild.id] and not isinstance(
+        if isinstance(
             message.channel, discord.abc.PrivateChannel
-        ):
+        ) or not self.is_enabled(message.guild):
+            return
+        if message.channel.id == self.art_channel[message.guild.id]:
             count = 0
             added = []
             for attachment in message.attachments:
