@@ -61,6 +61,9 @@ class Gallery(commands.Cog):
             return
         if not (artist := self.get_artist(member)):
             artist = self.add_artist(member)
+            self.bot.s.commit()
+            self.bot.s.refresh(artist)
+
         art = Art(artist_id=artist.id, link=url, description=description)
         self.bot.s.add(art)
         self.bot.s.commit()
@@ -99,7 +102,12 @@ class Gallery(commands.Cog):
         for art_id in art_ids:
             art = (
                 self.bot.s.query(Art)
-                .filter(Art.id == art_id, Art.artist.guild == ctx.guild.id)
+                .join(Artist)
+                .filter(
+                    Art.id == art_id,
+                    Art.artist_id == Artist.id,
+                    Artist.guild == ctx.guild.id,
+                )
                 .one_or_none()
             )
             if art is None:
