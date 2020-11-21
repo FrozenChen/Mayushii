@@ -107,6 +107,7 @@ class General(commands.Cog):
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
     async def status(self, ctx):
+        """Shows the bot current guild status"""
         dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
         embed = discord.Embed()
         embed.add_field(name="Guild", value=f"{ctx.guild.name}", inline=False)
@@ -124,6 +125,7 @@ class General(commands.Cog):
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
     async def togglecog(self, ctx, cog: str):
+        """Enables or disables a cog"""
         if cog in self.cogs:
             dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
             dbguild.flags ^= self.cogs[cog]
