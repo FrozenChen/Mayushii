@@ -1,7 +1,6 @@
 from discord.ext import commands
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from utils.database import CommunityRole, Base
+from utils.database import CommunityRole, Guild
+from utils.exceptions import DisabledCog
 from utils.utilities import gen_color
 import discord
 
@@ -12,20 +11,36 @@ class Community(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///data/community.db")
-        session = sessionmaker(bind=engine)
-        self.s = session()
-        Base.metadata.create_all(engine, tables=[CommunityRole.__table__])
-        self.s.commit()
-        self.roles = self.s.query(CommunityRole).all()
+        self.roles = {}
+        self.load_roles()
+
+    @staticmethod
+    def is_enabled(ctx):
+        dbguild = ctx.bot.s.query(Guild).get(ctx.guild.id)
+        return dbguild.flags & 0b1
+
+    async def cog_check(self, ctx):
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        if not self.is_enabled(ctx):
+            raise DisabledCog()
+        return True
+
+    def load_roles(self):
+        self.roles = {}
+        self.roles = {guild.id: [] for guild in self.bot.s.query(Guild).all()}
+        for role in self.bot.s.query(CommunityRole).all():
+            self.roles[role.guild].append(role)
 
     @commands.command()
     @commands.cooldown(rate=1, per=20.0, type=commands.BucketType.member)
     async def giveme(self, ctx, *, role_name=""):
         """Gives a community role to yourself."""
         if not (
-            entry := self.s.query(CommunityRole)
-            .filter(CommunityRole.alias == role_name)
+            entry := self.bot.s.query(CommunityRole)
+            .filter(
+                CommunityRole.alias == role_name, CommunityRole.guild == ctx.guild.id
+            )
             .one_or_none()
         ):
             ctx.command.reset_cooldown(ctx)
@@ -46,8 +61,10 @@ class Community(commands.Cog):
     async def takeme(self, ctx, *, role_name=""):
         """Removes a community role from yourself"""
         if not (
-            entry := self.s.query(CommunityRole)
-            .filter(CommunityRole.alias == role_name)
+            entry := self.bot.s.query(CommunityRole)
+            .filter(
+                CommunityRole.alias == role_name, CommunityRole.guild == ctx.guild.id
+            )
             .one_or_none()
         ):
             ctx.command.reset_cooldown(ctx)
@@ -73,40 +90,44 @@ class Community(commands.Cog):
     async def add(self, ctx, alias: str, role: discord.Role, *, description: str):
         """Adds a server role as a community role"""
         if (
-            self.s.query(CommunityRole)
-            .filter(CommunityRole.alias == alias)
+            self.bot.s.query(CommunityRole)
+            .filter(CommunityRole.alias == alias, CommunityRole.guild == ctx.guild.id)
             .one_or_none()
         ):
             await ctx.send("This alias is already in use.")
-        elif self.s.query(CommunityRole).get(role.id):
+        elif self.bot.s.query(CommunityRole).get((role.id, ctx.guild.id)):
             return await ctx.send("This role is a community role already.")
-        self.s.add(
+        self.bot.s.add(
             CommunityRole(
-                id=role.id, name=role.name, alias=alias, description=description
+                id=role.id,
+                guild=ctx.guild.id,
+                name=role.name,
+                alias=alias,
+                description=description,
             )
         )
-        self.s.commit()
-        self.roles = self.s.query(CommunityRole).all()
+        self.bot.s.commit()
+        self.load_roles()
         await ctx.send("Added community role succesfully")
 
     @commands.has_guild_permissions(manage_channels=True)
     @communityrole.command(aliases=["delete"])
     async def remove(self, ctx, role: discord.Role):
         """Removes a server role from the community roles"""
-        if not (entry := self.s.query(CommunityRole).get(role.id)):
+        if not (entry := self.bot.s.query(CommunityRole).get((role.id, ctx.guild.id))):
             return await ctx.send("This role is not a community role.")
-        entry.delete()
-        self.s.commit()
-        self.roles = self.s.query(CommunityRole).all()
+        self.bot.s.delete(entry)
+        self.bot.s.commit()
+        self.load_roles()
         await ctx.send("Role removed succesfully")
 
     @communityrole.command()
     async def list(self, ctx):
         """List the community roles"""
-        if not self.roles:
+        if not self.roles[ctx.guild.id]:
             return await ctx.send("There is no community roles.")
         embed = discord.Embed(title="Community roles", colour=gen_color(ctx.author.id))
-        for role in self.roles:
+        for role in self.roles[ctx.guild.id]:
             embed.add_field(name=role.alias, value=role.description)
         await ctx.send(embed=embed)
 

@@ -6,6 +6,11 @@ from discord.ext import commands
 from traceback import format_exception
 from sys import exc_info
 from utils import exceptions
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from utils.database import Guild, Base
+from utils.exceptions import DisabledCog, BotOwnerOnly
 
 cogs = ["cogs.gallery", "cogs.general", "cogs.voting", "cogs.raffle", "cogs.community"]
 
@@ -17,6 +22,7 @@ class Mayushii(commands.Bot):
         self.logger.info("Loading config.json")
         with open("data/config.json") as config:
             self.config = json.load(config)
+        self.owner_id = self.config["owner"]
 
     @staticmethod
     def get_logger(self):
@@ -37,9 +43,16 @@ class Mayushii(commands.Bot):
         return logger
 
     async def on_ready(self):
-        self.guild = bot.get_guild(self.config["guild"])
+        engine = create_engine("sqlite:///data/mayushii.db")
+        session = sessionmaker(bind=engine)
+        self.s = session()
+        Base.metadata.create_all(engine)
+        for guild in self.guilds:
+            if not self.s.query(Guild).get(guild.id):
+                self.s.add(Guild(id=guild.id, name=guild.name))
+            self.s.commit()
         self.load_cogs()
-        self.logger.info(f"Initialized on {self.guild.name}")
+        self.logger.info(f"Initialized on {','.join(x.name for x in self.guilds)}")
 
     def load_cogs(self):
         for cog in cogs:
@@ -56,8 +69,12 @@ class Mayushii(commands.Bot):
 
     async def on_command_error(self, ctx, exc):
         logger = self.logger if ctx.cog is None else ctx.cog.logger
+        if dbguild := self.s.query(Guild).get(ctx.guild.id):
+            error_channel = ctx.guild.get_channel(dbguild.error_channel)
+        else:
+            error_channel = None
 
-        if isinstance(exc, commands.CommandNotFound):
+        if isinstance(exc, (commands.CommandNotFound, DisabledCog, BotOwnerOnly)):
             return
 
         elif isinstance(
@@ -95,16 +112,19 @@ class Mayushii(commands.Bot):
                 await ctx.send("I can't do this!")
             else:
                 await ctx.send(f"`{ctx.command}` caused an exception.")
+                exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
                 logger.error(f"Exception occurred in {ctx.command}")
-                logger.debug(
-                    f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
-                )
+                logger.debug(exc)
+                if error_channel:
+                    await error_channel.send(exc)
+
         else:
             await ctx.send(f"Unhandled exception in `{ctx.command}`")
+            exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
             logger.error(f"Unhandled exception occurred in {ctx.command}")
-            logger.debug(
-                f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
-            )
+            logger.debug(exc)
+            if error_channel:
+                await error_channel.send(exc)
 
     async def on_error(self, event, *args, **kwargs):
         self.logger.error(f"Error occurred in {event}", exc_info=exc_info())

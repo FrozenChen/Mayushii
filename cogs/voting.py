@@ -2,15 +2,10 @@ import asyncio
 import discord
 
 from discord.ext import commands
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from utils.database import Poll, Voter, Vote, BlackList
-from utils.exceptions import NoOnGoingPoll
+from utils.database import Poll, Voter, Guild
+from utils.exceptions import NoOnGoingPoll, DisabledCog
 from utils.checks import not_new, not_blacklisted
 from utils.utilities import wait_for_answer
-
-Base = declarative_base()
 
 
 class Voting(commands.Cog):
@@ -19,87 +14,84 @@ class Voting(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///data/vote.db")
-        session = sessionmaker(bind=engine)
-        self.s = session()
-        Base.metadata.create_all(
-            engine,
-            tables=[
-                Poll.__table__,
-                Voter.__table__,
-                Vote.__table__,
-                BlackList.__table__,
-            ],
-        )
-        self.s.commit()
-        self.current_poll = self.s.query(Poll).filter_by(active=True).scalar()
-        self.logger.info(
-            f"Loaded poll {self.current_poll.name}"
-            if self.current_poll
-            else "No poll loaded"
-        )
+        self.polls = {
+            poll.guild: poll
+            for poll in self.bot.s.query(Poll).filter_by(active=True).all()
+        }
+
         self.queue = asyncio.Queue()
+
+    @staticmethod
+    def is_enabled(ctx):
+        dbguild = ctx.bot.s.query(Guild).get(ctx.guild.id)
+        return dbguild.flags & 0b1000
+
+    async def cog_check(self, ctx):
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        if not self.is_enabled(ctx):
+            raise DisabledCog()
+        return True
 
     # Checks
     def ongoing_poll(ctx: commands.context):
-        if ctx.cog.current_poll is None:
+        if ctx.cog.polls.get(ctx.guild.id) is None:
             raise NoOnGoingPoll(f"There is no ongoing poll")
         return True
 
     # Internal functions
-    def delete_vote(self, user: discord.Member):
-        vote = self.s.query(Vote).get((user.id, self.current_poll.id))
-        if vote is not None:
-            self.s.delete(vote)
-            self.s.commit()
+    def get_voter(self, member: discord.Member):
+        return self.bot.s.query(Voter).get((member.id, self.polls[member.guild.id].id))
+
+    @staticmethod
+    def get_current_poll(ctx):
+        return ctx.cog.polls.get(ctx.guild.id)
+
+    @staticmethod
+    def get_poll(ctx, poll_id: str):
+        return (
+            ctx.bot.s.query(Poll)
+            .filter(Poll.id == poll_id, Poll.guild == ctx.guild.id)
+            .one_or_none()
+        )
+
+    def delete_vote(self, member: discord.Member):
+        voter = self.get_voter(member)
+        if voter is not None:
+            self.bot.s.delete(voter)
+            self.bot.s.commit()
 
     async def process_vote(self):
         ctx, option = await self.queue.get()
-        voter_id = ctx.author.id
-        voter = self.s.query(Voter).get(voter_id)
+        voter = self.get_voter(ctx.author)
+        poll = self.get_current_poll(ctx)
         if voter is None:
-            voter = Voter(userid=voter_id)
-            self.s.add(voter)
-        vote = (
-            self.s.query(Vote)
-            .filter_by(voter_id=voter.userid, poll_id=self.current_poll.id)
-            .scalar()
-        )
-
-        if vote is None:
-            self.logger.debug(f"Added vote")
+            voter = Voter(userid=ctx.author.id, poll_id=poll.id, option=option)
+            self.bot.s.add(voter)
             await ctx.send("Vote added successfully!", delete_after=10)
-            self.s.add(
-                Vote(voter_id=voter.userid, poll_id=self.current_poll.id, option=option)
-            )
         else:
-            self.logger.debug(f"Modified vote")
+            voter.option = option
             await ctx.send("Vote modified successfully!", delete_after=10)
-            vote.option = option
-        self.s.commit()
+
+        self.bot.s.commit()
         self.queue.task_done()
 
     def count_votes(self, poll: Poll):
         result = {}
         for option in self.parse_options(poll.options):
-            c = self.s.query(Vote).filter_by(poll_id=poll.id, option=option).count()
+            c = (
+                self.bot.s.query(Voter)
+                .filter_by(poll_id=poll.id, option=option)
+                .count()
+            )
             result[option] = c
         return result
 
-    def create_poll(self, name, link: str, options: str):
-        poll = Poll(name=name, link=link, options=options)
-        self.s.add(poll)
-        self.s.commit()
+    def create_poll(self, name, guild: int, link: str, options: str):
+        poll = Poll(name=name, guild=guild, link=link, options=options)
+        self.bot.s.add(poll)
+        self.bot.s.commit()
         return poll
-
-    def add_blacklisted(self, user: discord.Member):
-        self.s.add(BlackList(userid=user.id))
-        self.s.commit()
-
-    def remove_blacklisted(self, user: discord.Member):
-        blacklisted = self.s.query(BlackList).get(user.id)
-        self.s.delete(blacklisted)
-        self.s.commit()
 
     @staticmethod
     def parse_options(options: str):
@@ -113,7 +105,7 @@ class Voting(commands.Cog):
     async def vote(self, ctx, option: str):
         """Votes for a option in the current poll."""
         await ctx.message.delete()
-        if option not in self.parse_options(self.current_poll.options):
+        if option not in self.parse_options(self.get_current_poll(ctx).options):
             await ctx.send("Invalid option")
             return
         await self.queue.put((ctx, option))
@@ -139,19 +131,19 @@ class Voting(commands.Cog):
         await ctx.send(
             "Say `yes` to confirm poll creation, `no` to cancel", embed=embed
         )
-
+        current_poll = self.get_current_poll(ctx)
         if await wait_for_answer(ctx):
-            poll = self.create_poll(name, link, options)
+            poll = self.create_poll(name, ctx.guild.id, link, options)
             await ctx.send(
                 f"Poll created successfully with id {poll.id}\nDo you want to activate it now?"
             )
             if await wait_for_answer(ctx):
-                if self.current_poll:
-                    self.current_poll.active = False
+                if current_poll:
+                    current_poll.active = False
                 poll.active = True
-                self.s.commit()
+                self.bot.s.commit()
                 self.logger.info(f"Enabled poll {poll.name}")
-                self.current_poll = poll
+                self.polls[ctx.guild.id] = poll
                 await ctx.send("Poll activated!")
         else:
             await ctx.send("Alright then.")
@@ -160,33 +152,38 @@ class Voting(commands.Cog):
     @poll.command()
     async def activate(self, ctx, poll_id: int):
         """Activates a poll"""
-        poll = self.s.query(Poll).get(poll_id)
+        poll = (
+            self.bot.s.query(Poll)
+            .filter(Poll.guild == ctx.guild.id, Poll.id == poll_id)
+            .one_or_none()
+        )
         if poll is None:
             await ctx.send("No poll with the provided id")
-        if self.current_poll is not None:
-            self.current_poll.active = False
+        current_poll = self.get_current_poll(ctx)
+        if self.get_current_poll(ctx) is not None:
+            current_poll.active = False
         poll.active = True
-        self.s.commit()
+        self.bot.s.commit()
         self.logger.info(f"Enabled poll {poll.name}")
         await ctx.send(f"Enabled poll {poll.name}")
-        self.current_poll = poll
+        self.polls[ctx.guild.id] = poll
 
     @commands.has_guild_permissions(manage_channels=True)
     @poll.command()
     async def close(self, ctx):
         """Closes a poll"""
-        if self.current_poll is None:
+        if (poll := self.get_current_poll(ctx)) is None:
             return await ctx.send("No ongoing poll")
-        self.current_poll.active = False
-        self.s.commit()
-        self.current_poll = None
+        poll.active = False
+        self.bot.s.commit()
+        del self.polls[ctx.guild.id]
 
     @commands.has_guild_permissions(manage_nicknames=True)
     @commands.command()
     async def tally(self, ctx):
-        if self.current_poll is None:
+        if self.get_current_poll(ctx) is None:
             return await ctx.send("No ongoing poll")
-        result = self.count_votes(self.current_poll)
+        result = self.count_votes(self.get_current_poll(ctx))
         embed = discord.Embed()
         msg = ""
         for x in result.keys():
@@ -197,7 +194,7 @@ class Voting(commands.Cog):
     @commands.has_guild_permissions(manage_channels=True)
     @poll.command()
     async def list(self, ctx):
-        polls = self.s.query(Poll).all()
+        polls = self.bot.s.query(Poll).filter(Poll.guild == ctx.guild.id).all()
         if polls:
             embed = discord.Embed(title="Poll List")
             for poll in polls:
@@ -206,7 +203,7 @@ class Voting(commands.Cog):
                     f"link={poll.link}\n"
                     f"option={poll.options}\n"
                     f"active={poll.active}\n"
-                    f"votes={len(poll.votes)}\n"
+                    f"votes={len(poll.voters)}\n"
                 )
                 embed.add_field(name=poll.name, value=msg)
             await ctx.send(embed=embed)
@@ -217,14 +214,16 @@ class Voting(commands.Cog):
     @poll.command()
     async def delete(self, ctx, poll_id: int):
         """Deletes a poll"""
-        poll = self.s.query(Poll).get(poll_id)
+        poll = self.bot.s.query(Poll).filter(
+            Poll.id == poll_id, Poll.guild == ctx.guild.id
+        )
         if not poll:
             await ctx.send("No poll associated with provided ID")
         else:
-            if poll == self.current_poll:
-                self.current_poll = None
-            self.s.delete(poll)
-            self.s.commit()
+            if poll == self.get_current_poll(ctx):
+                del self.polls[ctx.guild.id]
+            self.bot.s.delete(poll)
+            self.bot.s.commit()
             await ctx.send("Poll deleted successfully")
 
     @commands.has_guild_permissions(manage_nicknames=True)
@@ -232,12 +231,12 @@ class Voting(commands.Cog):
     async def info(self, ctx, poll_id: int = None):
         """Shows info about current poll or provided poll id"""
         if poll_id is None:
-            if self.current_poll is None:
+            if self.get_current_poll(ctx) is None:
                 await ctx.send_help(ctx.command)
                 return
             else:
-                poll_id = self.current_poll.id
-        poll = self.s.query(Poll).get(poll_id)
+                poll_id = self.get_current_poll(ctx).id
+        poll = self.get_poll(ctx, poll_id)
         embed = discord.Embed(title=poll.name, color=discord.Color.blurple())
         embed.add_field(name="ID", value=poll.id, inline=False)
         embed.add_field(name="Link", value=poll.link, inline=False)
@@ -252,31 +251,6 @@ class Voting(commands.Cog):
             msg += f"{x}: {result[x]}   "
         embed.add_field(name="Votes", value=msg, inline=False)
         await ctx.send(embed=embed)
-
-    @commands.group()
-    async def blacklist(self, ctx):
-        """Commands for the blacklist"""
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
-
-    @blacklist.command(name="add")
-    async def blacklist_add(self, ctx, member: discord.Member):
-        """Adds member to blacklist"""
-        if self.s.query(BlackList).get(member.id):
-            await ctx.send("User is already blacklisted")
-            return
-        self.add_blacklisted(member)
-        await ctx.send(f"Blacklisted {member.mention}!")
-
-    @blacklist.command(name="remove")
-    async def blacklist_remove(self, ctx, member: discord.Member):
-        """Removes member from blacklist."""
-        user = self.s.query(BlackList).get(member.id)
-        if not user:
-            await ctx.send("User is not blacklisted")
-            return
-        self.remove_blacklisted(member)
-        await ctx.send(f"Removed {member} from blacklist!")
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")

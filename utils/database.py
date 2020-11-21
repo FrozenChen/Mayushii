@@ -7,77 +7,85 @@ Base = declarative_base()
 
 class Artist(Base):
     __tablename__ = "artist"
-    userid = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True)
+    userid = Column(Integer)
+    guild = Column(Integer)
     gallery = relationship(
-        "Art", back_populates="user", cascade="all, delete, delete-orphan"
+        "Art",
+        back_populates="artist",
+        cascade="all, delete, delete-orphan",
     )
 
     def __repr__(self):
-        return f"<Artist userid='{self.userid}'>"
+        return f"<Artist userid='{self.id}'>"
 
 
 class Art(Base):
     __tablename__ = "gallery"
     id = Column(Integer, primary_key=True)
-    artist = Column(Integer, ForeignKey("artist.userid"))
+    artist_id = Column(Integer, ForeignKey("artist.id"))
     link = Column(String)
     description = Column(String)
-    user = relationship("Artist", back_populates="gallery")
+    artist = relationship(
+        "Artist",
+        back_populates="gallery",
+    )
 
     def __repr__(self):
-        return f"<Art id={self.id}, artist={self.artist}, link='{self.link}'>"
+        return f"<Art id={self.id}, artist={self.artist_id}, link='{self.link}'>"
 
 
 class BlackList(Base):
     __tablename__ = "blacklist"
     userid = Column(Integer, primary_key=True)
+    guild = Column(Integer, ForeignKey("guilds.id"), primary_key=True)
 
     def __repr__(self):
-        return f"<Blacklist userid={self.userid}'>"
+        return f"<Blacklist userid={self.userid} in guild {self.guild}'>"
 
 
-class Voter(Base):
-    __tablename__ = "voters"
-    userid = Column(Integer, primary_key=True)
-    votes = relationship(
-        "Vote", back_populates="user", cascade="all, delete, delete-orphan"
-    )
-
-    def __repr__(self):
-        return f"<Voter userid={self.userid}'>"
-
-
-class Vote(Base):
-    __tablename__ = "votes"
+class Guild(Base):
+    __tablename__ = "guilds"
     id = Column(Integer, primary_key=True)
-    voter_id = Column(Integer, ForeignKey("voters.userid"))
-    poll_id = Column(Integer, ForeignKey("polls.id"))
-    option = Column(String)
-    user = relationship("Voter", back_populates="votes")
-    poll = relationship("Poll", back_populates="votes")
-
-    def __repr__(self):
-        return f"<Vote id={self.id}, voter_id={self.voter_id}, poll_id={self.poll_id}, option={self.option}'>"
+    name = Column(String)
+    error_channel = Column(Integer, default=None)
+    art_channel = Column(Integer, default=None)
+    min_days = Column(Integer, default=7)
+    flags = Column(Integer, default=0)
 
 
 class Poll(Base):
     __tablename__ = "polls"
     id = Column(Integer, primary_key=True)
+    guild = Column(Integer, ForeignKey("guilds.id"))
     name = Column(String)
     link = Column(String)
     options = Column(String)
-    active = Column(Boolean, default=0)
-    votes = relationship(
-        "Vote", back_populates="poll", cascade="all, delete, delete-orphan"
+    active = Column(Boolean, default=False)
+    voters = relationship(
+        "Voter", back_populates="poll", cascade="all, delete, delete-orphan"
     )
 
     def __repr__(self):
         return f"<Poll id={self.id}, name={self.name}, link={self.link}, options={self.options}, active={self.active}'>"
 
 
+class Voter(Base):
+    __tablename__ = "voters"
+    userid = Column(Integer, primary_key=True)
+    poll_id = Column(Integer, ForeignKey("polls.id"), primary_key=True)
+    option = Column(String, default=None)
+
+    poll = relationship("Poll", back_populates="voters")
+
+    def __repr__(self):
+        return f"<Voter userid={self.userid}'>"
+
+
 class Giveaway(Base):
     __tablename__ = "giveaway"
     id = Column(Integer, primary_key=True)
+    guild = Column(Integer, ForeignKey("guilds.id"))
     name = Column(String)
     win_count = Column(Integer)
     ongoing = Column(Boolean, default=True)
@@ -116,8 +124,9 @@ class Entry(Base):
 
 
 class CommunityRole(Base):
-    __tablename__ = "commnunity_roles"
+    __tablename__ = "community_roles"
     id = Column(Integer, primary_key=True)
+    guild = Column(Integer, ForeignKey("guilds.id"), primary_key=True)
     name = Column(String)
     alias = Column(String)
     description = Column(String)

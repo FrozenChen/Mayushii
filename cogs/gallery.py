@@ -3,9 +3,8 @@ import asyncio
 import discord
 
 from discord.ext import commands
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from utils.database import Art, Artist, BlackList, Base
+from utils.database import Art, Artist, BlackList, Guild
+from utils.exceptions import DisabledCog
 
 
 class Gallery(commands.Cog):
@@ -14,18 +13,27 @@ class Gallery(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        engine = create_engine("sqlite:///data/gallery.db")
-        session = sessionmaker(bind=engine)
-        self.s = session()
-        Base.metadata.create_all(
-            engine, tables=[Art.__table__, Artist.__table__, BlackList.__table__]
-        )
-        self.s.commit()
-        self.art_channel = self.bot.config["art_channel"]
+        self.cleanup = False
+        self.art_channel = {
+            guild.id: guild.art_channel for guild in self.bot.s.query(Guild).all()
+        }
+
+    def is_enabled(self, guild):
+        dbguild = self.bot.s.query(Guild).get(guild.id)
+        return dbguild.flags & 0b10
+
+    async def cog_check(self, ctx):
+        if ctx.guild is None:
+            raise commands.NoPrivateMessage()
+        if not self.is_enabled(ctx.guild):
+            raise DisabledCog()
+        return True
 
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.channel.id == self.art_channel and not isinstance(
+        if not self.is_enabled(message.guild):
+            return
+        if message.channel.id == self.art_channel[message.guild.id] and not isinstance(
             message.channel, discord.abc.PrivateChannel
         ):
             count = 0
@@ -42,25 +50,35 @@ class Gallery(commands.Cog):
                     f"Added {count} image(s) to {message.author}'s gallery with id(s) {', '.join(map(str, added))}!"
                 )
 
-    def add_artist(self, artist):
-        self.s.add(Artist(userid=artist.id))
-        self.logger.debug(f"Added artist {artist.id}")
+    def add_artist(self, member: discord.Member):
+        artist = Artist(userid=member.id, guild=member.guild.id)
+        self.bot.s.add(artist)
+        self.logger.debug(f"Added artist {member.id} in guild {member.guild.id}")
+        return artist
 
-    def add_art(self, author, url, description=""):
-        if self.s.query(BlackList).get(author.id):
+    def add_art(self, member: discord.Member, url, description=""):
+        if self.bot.s.query(BlackList).get((member.id, member.guild.id)):
             return
-        if not self.s.query(Artist).filter(Artist.userid == author.id).all():
-            self.add_artist(author)
-        self.s.add(Art(artist=author.id, link=url, description=description))
-        self.s.commit()
-        art = self.s.query(Art).filter_by(link=url).scalar()
-        self.logger.debug(f"Added art with id {art.id}")
+        if not (artist := self.get_artist(member)):
+            artist = self.add_artist(member)
+        art = Art(artist_id=artist.id, link=url, description=description)
+        self.bot.s.add(art)
+        self.bot.s.commit()
+        self.bot.s.refresh(art)
+        self.logger.debug(f"Added art with id {art.id} in guild {art.artist.guild}")
         return art.id
 
+    def get_artist(self, member: discord.Member):
+        return (
+            self.bot.s.query(Artist)
+            .filter(Artist.userid == member.id, Artist.guild == member.guild.id)
+            .one_or_none()
+        )
+
     def delete_art(self, art_id):
-        self.s.query(Art).filter_by(id=art_id).delete()
+        self.bot.s.query(Art).filter_by(id=art_id).delete()
         self.logger.debug(f"Deleted art with id {art_id}")
-        self.s.commit()
+        self.bot.s.commit()
 
     @commands.command()
     async def addart(self, ctx, link, *, description=""):
@@ -79,12 +97,16 @@ class Gallery(commands.Cog):
         """Removes image from user gallery"""
         deleted = []
         for art_id in art_ids:
-            art = self.s.query(Art).get(art_id)
+            art = (
+                self.bot.s.query(Art)
+                .filter(Art.id == art_id, Art.artist.guild == ctx.guild.id)
+                .one_or_none()
+            )
             if art is None:
                 await ctx.send(f"ID {art_id} not found")
                 continue
             elif (
-                ctx.author.id != art.artist
+                ctx.author.id != art.artist.userid
                 and not ctx.author.permissions_in(ctx.channel).manage_nicknames
             ):
                 await ctx.send("You cant delete other people art!")
@@ -103,7 +125,7 @@ class Gallery(commands.Cog):
             pass
         if not member:
             member = ctx.author
-        artist = self.s.query(Artist).get(member.id)
+        artist = self.get_artist(member)
         if artist and artist.gallery:
             idx = 0
             total = len(artist.gallery)
@@ -129,21 +151,24 @@ class Gallery(commands.Cog):
                     message = await ctx.author.send(embed=embed)
                 else:
                     await message.edit(embed=embed)
-                await message.add_reaction("👈")
-                await message.add_reaction("👉")
-                try:
-                    react, user = await ctx.bot.wait_for(
-                        "reaction_add",
-                        check=lambda reaction, user: reaction.message == message
-                        and str(reaction.emoji) in ["👈", "👉"]
-                        and user != self.bot.user,
-                        timeout=20.0,
-                    )
-                    if str(react) == "👈":
-                        idx = (idx - 1) % total
-                    else:
-                        idx = (idx + 1) % total
-                except asyncio.TimeoutError:
+                if total > 1:
+                    await message.add_reaction("👈")
+                    await message.add_reaction("👉")
+                    try:
+                        react, user = await ctx.bot.wait_for(
+                            "reaction_add",
+                            check=lambda reaction, user: reaction.message == message
+                            and str(reaction.emoji) in ["👈", "👉"]
+                            and user != self.bot.user,
+                            timeout=20.0,
+                        )
+                        if str(react) == "👈":
+                            idx = (idx - 1) % total
+                        else:
+                            idx = (idx + 1) % total
+                    except asyncio.TimeoutError:
+                        return
+                else:
                     return
         else:
             try:
@@ -156,46 +181,22 @@ class Gallery(commands.Cog):
     @commands.command()
     async def delartist(self, ctx, member: discord.Member):
         """Deletes artist along with gallery"""
-        artist = self.s.query(Artist).get(member.id)
+        artist = self.get_artist(member)
         if artist is None:
             await ctx.send(f"{member} doesnt have a gallery")
             return
-        self.s.delete(artist)
-        self.s.commit()
+        self.bot.s.delete(artist)
+        self.bot.s.commit()
         await ctx.send("Artist deleted")
-
-    @commands.has_guild_permissions(manage_nicknames=True)
-    @commands.guild_only()
-    @commands.command()
-    async def blackart(self, ctx, member: discord.Member):
-        """Blacklist user"""
-        if self.s.query(BlackList).get(member.id):
-            await ctx.send(f"{member} is already in the blacklist")
-            return
-        self.s.add(BlackList(userid=member.id))
-        self.s.commit()
-        await ctx.send(f"Added {member} to the blacklist")
-
-    @commands.has_guild_permissions(manage_nicknames=True)
-    @commands.guild_only()
-    @commands.command()
-    async def whiteart(self, ctx, member: discord.Member):
-        """Removes user from Blacklist"""
-        if not (entry := self.s.query(BlackList).get(member.id)):
-            await ctx.send(f"{member} is not in the blacklist.")
-            return
-        self.s.delete(entry)
-        self.s.commit()
-        await ctx.send(f"Removed {member} from the blacklist")
-
-    async def cog_command_error(self, ctx, exc):
-        self.logger.debug(f"{ctx.command}: {exc}")
 
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
     async def cleanup(self, ctx):
         todelete = []
-        for art in self.s.query(Art).all():
+        self.cleanup = True
+        await ctx.send("Starting gallery cleanup (This might take a while)!")
+        await self.bot.change_presence(status=discord.Status.dnd)
+        for art in self.bot.s.query(Art).filter(Art.artist.guild == ctx.guild.id).all():
             async with aiohttp.ClientSession() as session:
                 try:
                     async with session.head(art.link) as resp:
@@ -205,11 +206,25 @@ class Gallery(commands.Cog):
                     todelete.append(art)
         if todelete:
             for art in todelete:
-                self.s.delete(art)
-            self.s.commit()
+                self.bot.s.delete(art)
+            self.bot.s.commit()
             await ctx.send(f"Deleted {len(todelete)} invalid images!")
         else:
             await ctx.send("No invalid images found!")
+        self.cleanup = False
+        await self.bot.change_presence(status=discord.Status.online)
+
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.command()
+    async def setartchannel(self, ctx, channel: discord.TextChannel):
+        dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
+        dbguild.art_channel = channel.id
+        self.art_channel[ctx.guild.id] = channel.id
+        self.bot.s.commit()
+        await ctx.send(f"Set art channel to {channel.mention}")
+
+    async def cog_command_error(self, ctx, exc):
+        self.logger.debug(f"{ctx.command}: {exc}")
 
 
 def setup(bot):
