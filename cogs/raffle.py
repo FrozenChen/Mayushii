@@ -3,14 +3,11 @@ import discord
 import random
 
 from discord.ext import commands
-from sqlalchemy.ext.declarative import declarative_base
 from utils.checks import not_new, not_blacklisted
 from utils.database import Giveaway, Entry, GiveawayRole, Guild
 from utils.exceptions import NoOnGoingRaffle, DisabledCog
 from utils.utilities import wait_for_answer
 from typing import List
-
-Base = declarative_base()
 
 
 class Raffle(commands.Cog):
@@ -39,26 +36,32 @@ class Raffle(commands.Cog):
 
     # checks
     def ongoing_raffle(ctx: commands.Context):
-        if ctx.cog.raffles[ctx.guild.id] and ctx.cog.raffles[ctx.guild.id].ongoing:
+        raffle = ctx.cog.get_raffle(ctx)
+        if raffle and raffle.ongoing:
             return True
         raise NoOnGoingRaffle("There is no ongoing raffle.")
 
     # internal functions
+    @staticmethod
+    def get_raffle(ctx):
+        return ctx.cog.raffles.get(ctx.guild.id)
+
     async def queue_empty(self):
         while not self.queue.empty():
             pass
 
     async def process_entry(self):
         ctx = await self.queue.get()
-        if self.raffles[ctx.guild].roles:
-            for role in self.raffles[ctx.guild].roles:
+        raffle = self.get_raffle(ctx)
+        if raffle.roles:
+            for role in raffle.roles:
                 if not any(discord.utils.get(ctx.author.roles, id=role.id)):
                     return await ctx.send("You are not allowed to participate!")
         user_id = ctx.author.id
-        entry = self.bot.s.query(Entry).get((user_id, self.raffles[ctx.guild].id))
+        entry = self.bot.s.query(Entry).get((user_id, raffle.id))
         if entry:
             return await ctx.send("You are already participating!")
-        self.bot.s.add(Entry(id=user_id, giveaway=self.raffles[ctx.guild].id))
+        self.bot.s.add(Entry(id=user_id, giveaway=raffle.id))
         self.bot.s.commit()
         await ctx.send(f"{ctx.author.mention} now you are participating in the raffle!")
         self.queue.task_done()
@@ -112,7 +115,7 @@ class Raffle(commands.Cog):
         roles: commands.Greedy[discord.Role] = None,
     ):
         """Creates a giveaway"""
-        if self.raffles[ctx.guild.id]:
+        if self.get_raffle(ctx):
             return await ctx.send("There is an already ongoing giveaway!")
         embed = discord.Embed(title="Proposed Giveaway", color=discord.Color.purple())
         embed.add_field(name="Name", value=name, inline=False)
@@ -127,7 +130,7 @@ class Raffle(commands.Cog):
             "Say `yes` to confirm giveaway creation, `no` to cancel", embed=embed
         )
         if await wait_for_answer(ctx):
-            self.raffles = self.create_raffle(
+            self.raffles[ctx.guild.id] = self.create_raffle(
                 name=name,
                 winners=winners,
                 roles=[role.id for role in roles] if roles else [],
