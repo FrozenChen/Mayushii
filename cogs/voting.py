@@ -216,7 +216,7 @@ class Voting(commands.Cog):
         """Deletes a poll"""
         poll = self.bot.s.query(Poll).filter(
             Poll.id == poll_id, Poll.guild == ctx.guild.id
-        )
+        ).first()
         if not poll:
             await ctx.send("No poll associated with provided ID")
         else:
