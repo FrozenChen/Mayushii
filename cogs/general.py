@@ -164,7 +164,7 @@ class General(commands.Cog):
         """Get your own avatar"""
         embed = disnake.Embed(title="Your avatar")
         embed.set_image(url=inter.author.avatar.url)
-        await inter.response.send_message(embed=embed)
+        await inter.response.send_message(embed=embed, ephemeral=True)
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
