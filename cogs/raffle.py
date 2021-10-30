@@ -1,12 +1,12 @@
 import asyncio
-import discord
+import disnake
 import random
 
-from discord.ext import commands
+from disnake.ext import commands
 from utils.checks import not_new, not_blacklisted
 from utils.database import Giveaway, Entry, GiveawayRole, Guild
 from utils.exceptions import NoOnGoingRaffle, DisabledCog
-from utils.utilities import wait_for_answer
+from utils.utilities import ConfirmationButtons
 from typing import List
 
 
@@ -55,7 +55,7 @@ class Raffle(commands.Cog):
         raffle = self.get_raffle(ctx)
         if raffle.roles:
             for role in raffle.roles:
-                if not any(discord.utils.get(ctx.author.roles, id=role.id)):
+                if not any(disnake.utils.get(ctx.author.roles, id=role.id)):
                     return await ctx.send("You are not allowed to participate!")
         user_id = ctx.author.id
         entry = self.bot.s.query(Entry).get((user_id, raffle.id))
@@ -112,12 +112,12 @@ class Raffle(commands.Cog):
         ctx,
         name: str,
         winners: int = 1,
-        roles: commands.Greedy[discord.Role] = None,
+        roles: commands.Greedy[disnake.Role] = None,
     ):
         """Creates a giveaway"""
         if self.get_raffle(ctx):
             return await ctx.send("There is an already ongoing giveaway!")
-        embed = discord.Embed(title="Proposed Giveaway", color=discord.Color.purple())
+        embed = disnake.Embed(title="Proposed Giveaway", color=disnake.Color.purple())
         embed.add_field(name="Name", value=name, inline=False)
         embed.add_field(name="Number of winners", value=str(winners), inline=False)
         if roles:
@@ -126,10 +126,11 @@ class Raffle(commands.Cog):
                 value=" ".join(role.name for role in roles),
                 inline=False,
             )
+        view = ConfirmationButtons()
         await ctx.send(
-            "Say `yes` to confirm giveaway creation, `no` to cancel", embed=embed
+            "Is this giveaway correct?",  embed=embed, view=view
         )
-        if await wait_for_answer(ctx):
+        if view.value:
             self.raffles[ctx.guild.id] = self.create_raffle(
                 name=name,
                 winners=winners,
@@ -149,7 +150,7 @@ class Raffle(commands.Cog):
     async def info(self, ctx):
         """Shows information about current giveaway"""
         raffle = self.raffles[ctx.guild.id]
-        embed = discord.Embed()
+        embed = disnake.Embed()
         embed.add_field(name="ID", value=raffle.id, inline=False)
         embed.add_field(name="Name", value=raffle.name, inline=False)
         if raffle.roles:
@@ -169,8 +170,9 @@ class Raffle(commands.Cog):
     @giveaway.command()
     async def cancel(self, ctx):
         """Cancels current giveaway"""
-        await ctx.send("Are you sure you want to cancel current giveaway?")
-        if await wait_for_answer(ctx):
+        view = ConfirmationButtons()
+        await ctx.send("Are you sure you want to cancel current giveaway?", view=view)
+        if view.value:
             self.raffles[ctx.guild.id].ongoing = False
             self.raffles[ctx.guild.id] = None
             self.bot.s.commit()
@@ -205,7 +207,7 @@ class Raffle(commands.Cog):
         for user in winners:
             try:
                 await user.send(f"You're the {raffle.name} raffle winner!!")
-            except (discord.HTTPException, discord.Forbidden):
+            except (disnake.HTTPException, disnake.Forbidden):
                 await ctx.send(f"Failed to send message to winner {user.mention}!")
         self.bot.s.commit()
         await ctx.send(f"Giveaway finished with {len(raffle.entries)} participants.")

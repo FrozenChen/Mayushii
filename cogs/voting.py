@@ -1,11 +1,13 @@
 import asyncio
-import discord
+import disnake
 
-from discord.ext import commands
+from disnake.ext import commands
+from disnake.ext.commands import Param
 from utils.database import Poll, Voter, Guild
-from utils.exceptions import NoOnGoingPoll, DisabledCog
+from utils.exceptions import NoOnGoingPoll, DisabledCog, TooNew, BlackListed
 from utils.checks import not_new, not_blacklisted
-from utils.utilities import wait_for_answer
+from utils.utilities import ConfirmationButtons
+from typing import Union
 
 
 class Voting(commands.Cog):
@@ -34,13 +36,20 @@ class Voting(commands.Cog):
         return True
 
     # Checks
-    def ongoing_poll(ctx: commands.context):
-        if ctx.cog.polls.get(ctx.guild.id) is None:
+    def ongoing_poll(
+        ctx: Union[commands.Context, disnake.ApplicationCommandInteraction]
+    ):
+        cog = (
+            ctx.application_command.cog
+            if isinstance(ctx, disnake.ApplicationCommandInteraction)
+            else ctx.cog
+        )
+        if cog is None or cog.polls.get(ctx.guild.id) is None:
             raise NoOnGoingPoll(f"There is no ongoing poll")
         return True
 
     # Internal functions
-    def get_voter(self, member: discord.Member):
+    def get_voter(self, member: disnake.Member):
         return self.bot.s.query(Voter).get((member.id, self.polls[member.guild.id].id))
 
     @staticmethod
@@ -55,24 +64,28 @@ class Voting(commands.Cog):
             .one_or_none()
         )
 
-    def delete_vote(self, member: discord.Member):
+    def delete_vote(self, member: disnake.Member):
         voter = self.get_voter(member)
         if voter is not None:
             self.bot.s.delete(voter)
             self.bot.s.commit()
 
     async def process_vote(self):
-        ctx, option = await self.queue.get()
-        voter = self.get_voter(ctx.author)
-        poll = self.get_current_poll(ctx)
+        inter, option = await self.queue.get()
+        voter = self.get_voter(inter.author)
+        poll = self.polls.get(inter.guild_id)
         if voter is None:
-            voter = Voter(userid=ctx.author.id, poll_id=poll.id, option=option)
+            voter = Voter(userid=inter.author.id, poll_id=poll.id, option=option)
             self.bot.s.add(voter)
-            await ctx.send("Vote added successfully!", delete_after=10)
+            await inter.response.send_message(
+                f"Vote for {option} successfully!", ephemeral=True
+            )
         else:
+            old_vote = voter.option
             voter.option = option
-            await ctx.send("Vote modified successfully!", delete_after=10)
-
+            await inter.response.send_message(
+                f"Vote changed from {old_vote} to {voter.option}!", ephemeral=True
+            )
         self.bot.s.commit()
         self.queue.task_done()
 
@@ -97,18 +110,38 @@ class Voting(commands.Cog):
     def parse_options(options: str):
         return options.split(" | ")
 
+    # @commands.check(not_new)
+    # @commands.check(not_blacklisted)
+    # @commands.check(ongoing_poll)
+    # @commands.guild_only()
+    # @commands.command()
+    # async def vote(self, ctx, option: str):
+    #     """Votes for a option in the current poll."""
+    #     await ctx.message.delete()
+    #     if option not in self.parse_options(self.get_current_poll(ctx).options):
+    #         await ctx.send("Invalid option", delete_after=10)
+    #         return
+    #     await self.queue.put((ctx, option))
+    #     await self.process_vote()
+
     @commands.check(not_new)
     @commands.check(not_blacklisted)
     @commands.check(ongoing_poll)
     @commands.guild_only()
-    @commands.command()
-    async def vote(self, ctx, option: str):
-        """Votes for a option in the current poll."""
-        await ctx.message.delete()
-        if option not in self.parse_options(self.get_current_poll(ctx).options):
-            await ctx.send("Invalid option", delete_after=10)
+    @commands.slash_command()
+    async def vote(
+        self,
+        inter: disnake.ApplicationCommandInteraction,
+        vote: str = Param(description="Your vote"),
+    ):
+        """Vote for the option you like"""
+        if vote not in self.parse_options(self.polls.get(inter.guild_id).options):
+            await inter.response.send_message(
+                f"Invalid option. Valid options: {' '.join(self.parse_options(self.polls.get(inter.guild_id).options))}",
+                ephemeral=True,
+            )
             return
-        await self.queue.put((ctx, option))
+        await self.queue.put((inter, vote))
         await self.process_vote()
 
     @commands.guild_only()
@@ -122,22 +155,25 @@ class Voting(commands.Cog):
     @poll.command()
     async def create(self, ctx, name, link, *, options):
         """Creates a poll"""
-        embed = discord.Embed(title="Proposed Poll", color=discord.Color.green())
+        embed = disnake.Embed(title="Proposed Poll", color=disnake.Color.green())
         embed.add_field(name="Name", value=name, inline=False)
         embed.add_field(name="Link", value=link, inline=False)
         embed.add_field(
             name="Options", value=" ".join(self.parse_options(options)), inline=False
         )
-        await ctx.send(
-            "Say `yes` to confirm poll creation, `no` to cancel", embed=embed
-        )
+        view = ConfirmationButtons()
+        await ctx.send("Is this poll correct?", view=view, embed=embed)
         current_poll = self.get_current_poll(ctx)
-        if await wait_for_answer(ctx):
+        if view.value:
             poll = self.create_poll(name, ctx.guild.id, link, options)
-            await ctx.send(
-                f"Poll created successfully with id {poll.id}\nDo you want to activate it now?"
+            view = ConfirmationButtons()
+            msg = await ctx.send(
+                f"Poll created successfully with id {poll.id}\nDo you want to activate it now?",
+                view=view,
             )
-            if await wait_for_answer(ctx):
+            await view.wait()
+            await msg.edit(view=None)
+            if view.value:
                 if current_poll:
                     current_poll.active = False
                 poll.active = True
@@ -158,7 +194,7 @@ class Voting(commands.Cog):
             .one_or_none()
         )
         if poll is None:
-            await ctx.send("No poll with the provided id")
+            return await ctx.send("No poll with the provided id")
         current_poll = self.get_current_poll(ctx)
         if self.get_current_poll(ctx) is not None:
             current_poll.active = False
@@ -184,7 +220,7 @@ class Voting(commands.Cog):
         if self.get_current_poll(ctx) is None:
             return await ctx.send("No ongoing poll")
         result = self.count_votes(self.get_current_poll(ctx))
-        embed = discord.Embed()
+        embed = disnake.Embed()
         msg = ""
         for x in result.keys():
             msg += f"{x}: {result[x]}   "
@@ -196,7 +232,7 @@ class Voting(commands.Cog):
     async def list(self, ctx):
         polls = self.bot.s.query(Poll).filter(Poll.guild == ctx.guild.id).all()
         if polls:
-            embed = discord.Embed(title="Poll List")
+            embed = disnake.Embed(title="Poll List")
             for poll in polls:
                 msg = (
                     f"id={poll.id}\n"
@@ -214,9 +250,11 @@ class Voting(commands.Cog):
     @poll.command()
     async def delete(self, ctx, poll_id: int):
         """Deletes a poll"""
-        poll = self.bot.s.query(Poll).filter(
-            Poll.id == poll_id, Poll.guild == ctx.guild.id
-        ).first()
+        poll = (
+            self.bot.s.query(Poll)
+            .filter(Poll.id == poll_id, Poll.guild == ctx.guild.id)
+            .first()
+        )
         if not poll:
             await ctx.send("No poll associated with provided ID")
         else:
@@ -237,7 +275,7 @@ class Voting(commands.Cog):
             else:
                 poll_id = self.get_current_poll(ctx).id
         poll = self.get_poll(ctx, poll_id)
-        embed = discord.Embed(title=poll.name, color=discord.Color.blurple())
+        embed = disnake.Embed(title=poll.name, color=disnake.Color.blurple())
         embed.add_field(name="ID", value=poll.id, inline=False)
         embed.add_field(name="Link", value=poll.link, inline=False)
         embed.add_field(
@@ -251,6 +289,12 @@ class Voting(commands.Cog):
             msg += f"{x}: {result[x]}   "
         embed.add_field(name="Votes", value=msg, inline=False)
         await ctx.send(embed=embed)
+
+    @vote.error
+    async def info_error(self, inter, error):
+        if isinstance(error, (NoOnGoingPoll, TooNew, BlackListed)):
+            await inter.response.send_message(error, ephemeral=True)
+            error.handled = True
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")

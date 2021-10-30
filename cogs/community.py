@@ -1,8 +1,9 @@
-from discord.ext import commands
+import disnake
+
+from disnake.ext import commands
 from utils.database import CommunityRole, Guild
 from utils.exceptions import DisabledCog
 from utils.utilities import gen_color
-import discord
 
 
 class Community(commands.Cog):
@@ -52,7 +53,7 @@ class Community(commands.Cog):
             return await ctx.send("You already have this role.")
         try:
             await ctx.author.add_roles(role)
-        except discord.errors.Forbidden:
+        except disnake.errors.Forbidden:
             return await ctx.send("💢 I don't have permission to do this.")
         await ctx.send(f"You now have the {role.name} role!")
 
@@ -71,12 +72,12 @@ class Community(commands.Cog):
             return await ctx.send(
                 f"Check the community roles with {self.bot.command_prefix}cr list"
             )
-        role = discord.utils.get(ctx.author.roles, id=entry.id)
+        role = disnake.utils.get(ctx.author.roles, id=entry.id)
         if not role:
             return await ctx.send("You don't have this role")
         try:
             await ctx.author.remove_roles(role)
-        except discord.errors.Forbidden:
+        except disnake.errors.Forbidden:
             return await ctx.send("💢 I don't have permission to do this.")
         await ctx.send(f"{ctx.author.mention} The role has been removed!")
 
@@ -87,7 +88,7 @@ class Community(commands.Cog):
 
     @commands.has_guild_permissions(manage_channels=True)
     @communityrole.command()
-    async def add(self, ctx, alias: str, role: discord.Role, *, description: str):
+    async def add(self, ctx, alias: str, role: disnake.Role, *, description: str):
         """Adds a server role as a community role"""
         if (
             self.bot.s.query(CommunityRole)
@@ -112,7 +113,7 @@ class Community(commands.Cog):
 
     @commands.has_guild_permissions(manage_channels=True)
     @communityrole.command(aliases=["delete"])
-    async def remove(self, ctx, role: discord.Role):
+    async def remove(self, ctx, role: disnake.Role):
         """Removes a server role from the community roles"""
         if not (entry := self.bot.s.query(CommunityRole).get((role.id, ctx.guild.id))):
             return await ctx.send("This role is not a community role.")
@@ -126,7 +127,7 @@ class Community(commands.Cog):
         """List the community roles"""
         if not self.roles[ctx.guild.id]:
             return await ctx.send("There is no community roles.")
-        embed = discord.Embed(title="Community roles", colour=gen_color(ctx.author.id))
+        embed = disnake.Embed(title="Community roles", colour=gen_color(ctx.author.id))
         for role in self.roles[ctx.guild.id]:
             embed.add_field(name=role.alias, value=role.description)
         await ctx.send(embed=embed)

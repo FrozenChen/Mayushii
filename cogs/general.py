@@ -1,8 +1,8 @@
-import discord
-import subprocess
 import aiohttp
+import disnake
+import subprocess
 
-from discord.ext import commands
+from disnake.ext import commands
 from utils.database import Guild, BlackList
 from utils.exceptions import BotOwnerOnly
 
@@ -29,7 +29,7 @@ class General(commands.Cog):
     @commands.command()
     async def about(self, ctx):
         """About Mayushii"""
-        embed = discord.Embed(
+        embed = disnake.Embed(
             title="Mayushii", url="https://github.com/FrozenChen/Mayushii"
         )
         embed.description = "A bot for Nintendo Homebrew artistic channel."
@@ -96,7 +96,7 @@ class General(commands.Cog):
     @commands.guild_only()
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
-    async def seterrchannel(self, ctx, channel: discord.TextChannel):
+    async def seterrchannel(self, ctx, channel: disnake.TextChannel):
         """Set the channel to output errors"""
         dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
         dbguild.error_channel = channel.id
@@ -109,7 +109,7 @@ class General(commands.Cog):
     async def status(self, ctx):
         """Shows the bot current guild status"""
         dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
-        embed = discord.Embed()
+        embed = disnake.Embed()
         embed.add_field(name="Guild", value=f"{ctx.guild.name}", inline=False)
         embed.add_field(
             name="Cogs",
@@ -141,7 +141,7 @@ class General(commands.Cog):
             await ctx.send_help(ctx.command)
 
     @blacklist.command(name="add")
-    async def blacklist_add(self, ctx, member: discord.Member):
+    async def blacklist_add(self, ctx, member: disnake.Member):
         """Adds member to blacklist"""
         if self.bot.s.query(BlackList).get((member.id, ctx.guild.id)):
             await ctx.send("User is already blacklisted")
@@ -150,7 +150,7 @@ class General(commands.Cog):
         await ctx.send(f"Blacklisted {member.mention}!")
 
     @blacklist.command(name="remove")
-    async def blacklist_remove(self, ctx, member: discord.Member):
+    async def blacklist_remove(self, ctx, member: disnake.Member):
         """Removes member from blacklist."""
         user = self.bot.s.query(BlackList).get((member.id, ctx.guild.id))
         if not user:
@@ -158,6 +158,13 @@ class General(commands.Cog):
             return
         self.bot.s.delete(user)
         await ctx.send(f"Removed {member.mention} from blacklist!")
+
+    @commands.user_command()
+    async def avatar(self, inter):
+        """Get your own avatar"""
+        embed = disnake.Embed(title="Your avatar")
+        embed.set_image(url=inter.author.avatar.url)
+        await inter.response.send_message(embed=embed)
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")

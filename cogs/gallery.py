@@ -1,10 +1,69 @@
 import aiohttp
-import asyncio
-import discord
+import disnake
 
-from discord.ext import commands
+from disnake import ButtonStyle
+from disnake.ext import commands
 from utils.database import Art, Artist, BlackList, Guild
 from utils.exceptions import DisabledCog
+
+
+class GalleryView(disnake.ui.View):
+    def __init__(self, ctx, artist: Artist):
+        super().__init__(timeout=20)
+        self.ctx = ctx
+        self.artist = artist
+        self.current = 0
+        self.message = None
+
+    async def on_timeout(self):
+        if self.message:
+            await self.message.edit(view=None)
+
+    def create_embed(self):
+        embed = disnake.Embed(color=disnake.Color.dark_red())
+        art = self.artist.gallery[self.current]
+        embed.set_author(
+            name=f"{self.ctx.author.display_name}'s Gallery {self.current + 1}",
+            icon_url=self.ctx.author.avatar.url,
+        )
+        footer = f"Art id: {art.id}"
+        if art.link.lower().endswith((".gif", ".png", ".jpeg", "jpg")):
+            embed.set_image(url=art.link)
+            if art.description:
+                footer += f"\n{art.description}"
+        else:
+            embed.description = f"{art.description}\n{art.link}"
+        footer += f"\n{self.current + 1}/{len(self.artist.gallery)}"
+        embed.set_footer(text=footer)
+        return embed
+
+    @disnake.ui.button(label="Previous", style=ButtonStyle.primary)
+    async def previous_button(
+        self, button: disnake.ui.Button, interaction: disnake.Interaction
+    ):
+        self.current = (self.current - 1) % len(self.artist.gallery)
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    @disnake.ui.button(label="Next", style=ButtonStyle.primary)
+    async def next_button(
+        self, button: disnake.ui.Button, interaction: disnake.Interaction
+    ):
+        self.current = (self.current + 1) % len(self.artist.gallery)
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    @disnake.ui.button(label="First", style=ButtonStyle.primary)
+    async def first_button(
+        self, button: disnake.ui.Button, interaction: disnake.Interaction
+    ):
+        self.current = 0
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    @disnake.ui.button(label="Latest", style=ButtonStyle.primary)
+    async def latest_button(
+        self, button: disnake.ui.Button, interaction: disnake.Interaction
+    ):
+        self.current = len(self.artist.gallery) - 1
+        await interaction.response.edit_message(embed=self.create_embed())
 
 
 class Gallery(commands.Cog):
@@ -32,7 +91,7 @@ class Gallery(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message):
         if isinstance(
-            message.channel, discord.abc.PrivateChannel
+            message.channel, disnake.abc.PrivateChannel
         ) or not self.is_enabled(message.guild):
             return
         if message.channel.id == self.art_channel[message.guild.id]:
@@ -50,13 +109,13 @@ class Gallery(commands.Cog):
                     f"Added {count} image(s) to {message.author}'s gallery with id(s) {', '.join(map(str, added))}!"
                 )
 
-    def add_artist(self, member: discord.Member):
+    def add_artist(self, member: disnake.Member):
         artist = Artist(userid=member.id, guild=member.guild.id)
         self.bot.s.add(artist)
         self.logger.debug(f"Added artist {member.id} in guild {member.guild.id}")
         return artist
 
-    def add_art(self, member: discord.Member, url, description=""):
+    def add_art(self, member: disnake.Member, url, description=""):
         if self.bot.s.query(BlackList).get((member.id, member.guild.id)):
             return
         if not (artist := self.get_artist(member)):
@@ -71,7 +130,7 @@ class Gallery(commands.Cog):
         self.logger.debug(f"Added art with id {art.id} in guild {art.artist.guild}")
         return art.id
 
-    def get_artist(self, member: discord.Member):
+    def get_artist(self, member: disnake.Member):
         return (
             self.bot.s.query(Artist)
             .filter(Artist.userid == member.id, Artist.guild == member.guild.id)
@@ -125,69 +184,28 @@ class Gallery(commands.Cog):
             await ctx.send(f"Deleted with ID {', '.join(deleted)} successfully!")
 
     @commands.command()
-    async def gallery(self, ctx, member: discord.Member = None):
+    async def gallery(self, ctx, member: disnake.Member = None):
         """Show user gallery in DMs"""
         try:
             await ctx.message.delete()
-        except discord.Forbidden:
+        except disnake.Forbidden:
             pass
         if not member:
             member = ctx.author
         artist = self.get_artist(member)
         if artist and artist.gallery:
-            idx = 0
-            total = len(artist.gallery)
-            message = None
-            while True:
-                art = artist.gallery[idx]
-                embed = discord.Embed(color=discord.Color.dark_red())
-                embed.set_author(
-                    name=f"{member.display_name}'s Gallery {idx + 1}",
-                    icon_url=member.avatar_url,
-                )
-                footer = f"Art id: {art.id}"
-                if art.link.lower().endswith((".gif", ".png", ".jpeg", "jpg")):
-                    embed.set_image(url=art.link)
-                    if art.description:
-                        footer += f"\n{art.description}"
-
-                else:
-                    embed.description = f"{art.description}\n{art.link}"
-                footer += f"\n{idx + 1}/{total}"
-                embed.set_footer(text=footer)
-                if not message:
-                    message = await ctx.author.send(embed=embed)
-                else:
-                    await message.edit(embed=embed)
-                if total > 1:
-                    await message.add_reaction("👈")
-                    await message.add_reaction("👉")
-                    try:
-                        react, user = await ctx.bot.wait_for(
-                            "reaction_add",
-                            check=lambda reaction, user: reaction.message == message
-                            and str(reaction.emoji) in ["👈", "👉"]
-                            and user != self.bot.user,
-                            timeout=20.0,
-                        )
-                        if str(react) == "👈":
-                            idx = (idx - 1) % total
-                        else:
-                            idx = (idx + 1) % total
-                    except asyncio.TimeoutError:
-                        return
-                else:
-                    return
+            view = GalleryView(ctx, artist)
+            view.message = await ctx.author.send(embed=view.create_embed(), view=view)
         else:
             try:
                 await ctx.author.send("This user doesnt have a gallery")
-            except discord.Forbidden:
+            except disnake.Forbidden:
                 pass
 
     @commands.has_guild_permissions(kick_members=True)
     @commands.guild_only()
     @commands.command()
-    async def delartist(self, ctx, member: discord.Member):
+    async def delartist(self, ctx, member: disnake.Member):
         """Deletes artist along with gallery"""
         artist = self.get_artist(member)
         if artist is None:
@@ -203,7 +221,7 @@ class Gallery(commands.Cog):
         todelete = []
         self.cleanup = True
         await ctx.send("Starting gallery cleanup (This might take a while)!")
-        await self.bot.change_presence(status=discord.Status.dnd)
+        await self.bot.change_presence(status=disnake.Status.dnd)
         for art in self.bot.s.query(Art).filter(Art.artist.guild == ctx.guild.id).all():
             async with aiohttp.ClientSession() as session:
                 try:
@@ -220,11 +238,11 @@ class Gallery(commands.Cog):
         else:
             await ctx.send("No invalid images found!")
         self.cleanup = False
-        await self.bot.change_presence(status=discord.Status.online)
+        await self.bot.change_presence(status=disnake.Status.online)
 
     @commands.has_guild_permissions(manage_guild=True)
     @commands.command()
-    async def setartchannel(self, ctx, channel: discord.TextChannel):
+    async def setartchannel(self, ctx, channel: disnake.TextChannel):
         dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
         dbguild.art_channel = channel.id
         self.art_channel[ctx.guild.id] = channel.id

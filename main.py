@@ -1,8 +1,8 @@
-import discord
+import disnake
 import logging
 import json
 
-from discord.ext import commands
+from disnake.ext import commands
 from traceback import format_exception
 from sys import exc_info
 from utils import exceptions
@@ -69,7 +69,7 @@ class Mayushii(commands.Bot):
 
     async def on_command_error(self, ctx, exc):
         logger = self.logger if ctx.cog is None else ctx.cog.logger
-        if dbguild := self.s.query(Guild).get(ctx.guild.id):
+        if ctx.guild and (dbguild := self.s.query(Guild).get(ctx.guild.id)):
             error_channel = ctx.guild.get_channel(dbguild.error_channel)
         else:
             error_channel = None
@@ -101,14 +101,14 @@ class Mayushii(commands.Bot):
         elif isinstance(exc, commands.MissingRequiredArgument):
             await ctx.send(exc)
             await ctx.send_help(ctx.command)
-        elif isinstance(exc, discord.ext.commands.errors.CommandOnCooldown):
+        elif isinstance(exc, disnake.ext.commands.errors.CommandOnCooldown):
             await ctx.send(
                 f"This command is on cooldown, try again in {exc.retry_after:.2f}s.",
                 delete_after=10,
             )
 
         elif isinstance(exc, commands.CommandInvokeError):
-            if isinstance(exc.original, discord.Forbidden):
+            if isinstance(exc.original, disnake.Forbidden):
                 await ctx.send("I can't do this!")
             else:
                 await ctx.send(f"`{ctx.command}` caused an exception.")
@@ -130,7 +130,7 @@ class Mayushii(commands.Bot):
         self.logger.error(f"Error occurred in {event}", exc_info=exc_info())
 
 
-intents = discord.Intents(guilds=True, members=True, messages=True, reactions=True)
+intents = disnake.Intents(guilds=True, members=True, messages=True, reactions=True)
 bot = Mayushii(
     command_prefix="$",
     description="A bot for Nintendo Homebrew artistic channel",

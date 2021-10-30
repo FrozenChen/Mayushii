@@ -1,11 +1,11 @@
-from datetime import datetime
+import datetime
 from utils.exceptions import TooNew, BlackListed
 from utils.database import BlackList, Guild
 
 
 def not_new(ctx):
     dbguild = ctx.bot.s.query(Guild).get(ctx.guild.id)
-    if (datetime.now() - ctx.author.joined_at).days < dbguild.min_days:
+    if (datetime.datetime.now(datetime.timezone.utc) - ctx.author.joined_at).days < dbguild.min_days:
         raise TooNew(
             f"Only members older than {ctx.bot.config['min_days']} days can participate."
         )
