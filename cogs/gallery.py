@@ -205,16 +205,19 @@ class Gallery(commands.Cog):
         """Cleans up the galleries of invalid links"""
         todelete = []
         self.cleanup = True
-        msg = await inter.response.send_message(
+        await inter.response.send_message(
             "Starting gallery cleanup (This might take a while)!"
         )
         await self.bot.change_presence(status=disnake.Status.dnd)
         for art in (
-            self.bot.s.query(Art).filter(Art.artist.guild == inter.guild.id).all()
+            self.bot.s.query(Art, Artist)
+            .filter(Art.artist_id == Artist.id)
+            .filter(Artist.guild == inter.guild.id)
+            .all()
         ):
             async with aiohttp.ClientSession() as session:
                 try:
-                    async with session.head(art.link) as resp:
+                    async with session.head(art["Art"].link) as resp:
                         if resp.status == 403:
                             todelete.append(art)
                 except aiohttp.InvalidURL:
@@ -223,9 +226,11 @@ class Gallery(commands.Cog):
             for art in todelete:
                 self.bot.s.delete(art)
             self.bot.s.commit()
-            await msg.edit(f"Deleted {len(todelete)} invalid images!")
+            await inter.edit_original_message(
+                content=f"Deleted {len(todelete)} invalid images!"
+            )
         else:
-            await msg.edit("No invalid images found!")
+            await inter.edit_original_message(content="No invalid images found!")
         self.cleanup = False
         await self.bot.change_presence(status=disnake.Status.online)
 
