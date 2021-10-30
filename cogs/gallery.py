@@ -8,10 +8,11 @@ from utils.exceptions import DisabledCog
 
 
 class GalleryView(disnake.ui.View):
-    def __init__(self, ctx, artist: Artist):
+    def __init__(self, ctx, artist: Artist, member: disnake.Member):
         super().__init__(timeout=20)
         self.ctx = ctx
         self.artist = artist
+        self.artist_user = member
         self.current = 0
         self.message = None
 
@@ -23,8 +24,8 @@ class GalleryView(disnake.ui.View):
         embed = disnake.Embed(color=disnake.Color.dark_red())
         art = self.artist.gallery[self.current]
         embed.set_author(
-            name=f"{self.ctx.author.display_name}'s Gallery {self.current + 1}",
-            icon_url=self.ctx.author.avatar.url,
+            name=f"{self.artist_user.display_name}'s Gallery {self.current + 1}",
+            icon_url=self.artist_user.avatar.url,
         )
         footer = f"Art id: {art.id}"
         if art.link.lower().endswith((".gif", ".png", ".jpeg", "jpg")):
@@ -194,7 +195,7 @@ class Gallery(commands.Cog):
             member = ctx.author
         artist = self.get_artist(member)
         if artist and artist.gallery:
-            view = GalleryView(ctx, artist)
+            view = GalleryView(ctx, artist, member)
             view.message = await ctx.author.send(embed=view.create_embed(), view=view)
         else:
             try:
