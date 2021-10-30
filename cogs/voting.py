@@ -106,7 +106,7 @@ class Voting(commands.Cog):
         """Votes for a option in the current poll."""
         await ctx.message.delete()
         if option not in self.parse_options(self.get_current_poll(ctx).options):
-            await ctx.send("Invalid option")
+            await ctx.send("Invalid option", delete_after=10)
             return
         await self.queue.put((ctx, option))
         await self.process_vote()
