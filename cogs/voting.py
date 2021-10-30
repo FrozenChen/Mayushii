@@ -48,7 +48,7 @@ class Voting(commands.Cog):
 
     @staticmethod
     def get_current_poll(inter):
-        return inter.cog.polls.get(inter.guild.id)
+        return inter.application_command.cog.polls.get(inter.guild.id)
 
     @staticmethod
     def get_poll(inter, poll_id: str):
