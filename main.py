@@ -157,9 +157,11 @@ class Mayushii(commands.Bot):
             )
 
         else:
-            await inter.response.send_message(
-                f"Unhandled exception in `{inter.data.name}`", ephemeral=True
-            )
+            msg = f"Unhandled exception in `{inter.data.name}`"
+            if inter.response.is_done():
+                await inter.edit_original_message(content=msg, embed=None, view=None)
+            else:
+                await inter.response.send_message(msg, ephemeral=True)
             exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
             logger.error(f"Unhandled exception occurred `{inter.data.name}`")
             logger.debug(exc)
