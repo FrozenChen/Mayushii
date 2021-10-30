@@ -3,16 +3,17 @@ import disnake
 
 from disnake import ButtonStyle
 from disnake.ext import commands
+from disnake.ext.commands import Param
 from utils.database import Art, Artist, BlackList, Guild
 from utils.exceptions import DisabledCog
 
 
 class GalleryView(disnake.ui.View):
-    def __init__(self, ctx, artist: Artist, member: disnake.Member):
+    def __init__(self, inter, artist: Artist):
         super().__init__(timeout=20)
-        self.ctx = ctx
+        self.inter = inter
         self.artist = artist
-        self.artist_user = member
+        self.artist_user = inter.filled_options["member"]
         self.current = 0
         self.message = None
 
@@ -143,87 +144,74 @@ class Gallery(commands.Cog):
         self.logger.debug(f"Deleted art with id {art_id}")
         self.bot.s.commit()
 
-    @commands.command()
-    async def addart(self, ctx, link, *, description=""):
+    @commands.slash_command()
+    async def art(self, inter):
+        pass
+
+    @art.sub_command()
+    async def add(
+        self,
+        inter,
+        link: str = Param(description="Link to the art"),
+        description: str = Param(description="Description of the art"),
+    ):
         """Adds link to user gallery"""
         if (
             not link.lower().endswith((".gif", ".png", ".jpeg", "jpg"))
             and description == ""
         ):
-            await ctx.send("Add a description for non image entries!")
+            await inter.response.send_message(
+                "Add a description for non image entries!"
+            )
         else:
-            id = self.add_art(ctx.author, link, description)
-            await ctx.send(f"Added art with id {id}!")
+            id = self.add_art(inter.author, link, description)
+            await inter.response.send_message(f"Added art with id {id}!")
 
-    @commands.command()
-    async def delart(self, ctx, art_ids: commands.Greedy[int]):
+    @art.sub_command()
+    async def delete(
+        self, inter, art_id: int = Param(description="ID of the art to delete")
+    ):
         """Removes image from user gallery"""
         deleted = []
-        for art_id in art_ids:
-            art = (
-                self.bot.s.query(Art)
-                .join(Artist)
-                .filter(
-                    Art.id == art_id,
-                    Art.artist_id == Artist.id,
-                    Artist.guild == ctx.guild.id,
-                )
-                .one_or_none()
+        art = (
+            self.bot.s.query(Art)
+            .join(Artist)
+            .filter(
+                Art.id == art_id,
+                Art.artist_id == Artist.id,
+                Artist.guild == inter.guild.id,
             )
-            if art is None:
-                await ctx.send(f"ID {art_id} not found")
-                continue
-            elif (
-                ctx.author.id != art.artist.userid
-                and not ctx.author.permissions_in(ctx.channel).manage_nicknames
-            ):
-                await ctx.send("You cant delete other people art!")
-                return
-            self.delete_art(art_id)
-            deleted.append(str(art_id))
-        if deleted:
-            await ctx.send(f"Deleted with ID {', '.join(deleted)} successfully!")
-
-    @commands.command()
-    async def gallery(self, ctx, member: disnake.Member = None):
-        """Show user gallery in DMs"""
-        try:
-            await ctx.message.delete()
-        except disnake.Forbidden:
-            pass
-        if not member:
-            member = ctx.author
-        artist = self.get_artist(member)
-        if artist and artist.gallery:
-            view = GalleryView(ctx, artist, member)
-            view.message = await ctx.author.send(embed=view.create_embed(), view=view)
-        else:
-            try:
-                await ctx.author.send("This user doesnt have a gallery")
-            except disnake.Forbidden:
-                pass
-
-    @commands.has_guild_permissions(kick_members=True)
-    @commands.guild_only()
-    @commands.command()
-    async def delartist(self, ctx, member: disnake.Member):
-        """Deletes artist along with gallery"""
-        artist = self.get_artist(member)
-        if artist is None:
-            await ctx.send(f"{member} doesnt have a gallery")
+            .one_or_none()
+        )
+        if art is None:
+            await inter.response.send_message(f"ID {art_id} not found")
             return
-        self.bot.s.delete(artist)
-        self.bot.s.commit()
-        await ctx.send("Artist deleted")
+        elif (
+            inter.author.id != art.artist.userid
+            and not inter.author.permissions_in(inter.channel).manage_nicknames
+        ):
+            await inter.response.send_message("You cant delete other people art!")
+            return
+        self.delete_art(art_id)
+        deleted.append(str(art_id))
+        if deleted:
+            await inter.response.send_message(
+                f"Deleted with ID {', '.join(deleted)} successfully!"
+            )
 
     @commands.has_guild_permissions(manage_guild=True)
-    @commands.command()
-    async def cleanup(self, ctx):
+    @art.sub_command()
+    async def cleanup(self, inter):
+        """Cleans up the galleries of invalid links"""
         todelete = []
         self.cleanup = True
-        await ctx.send("Starting gallery cleanup (This might take a while)!")
+        msg = await inter.response.send_message(
+            "Starting gallery cleanup (This might take a while)!"
+        )
         await self.bot.change_presence(status=disnake.Status.dnd)
-        for art in self.bot.s.query(Art).filter(Art.artist.guild == ctx.guild.id).all():
+        for art in (
+            self.bot.s.query(Art).filter(Art.artist.guild == inter.guild.id).all()
+        ):
             async with aiohttp.ClientSession() as session:
                 try:
                     async with session.head(art.link) as resp:
@@ -235,20 +223,66 @@ class Gallery(commands.Cog):
             for art in todelete:
                 self.bot.s.delete(art)
             self.bot.s.commit()
-            await ctx.send(f"Deleted {len(todelete)} invalid images!")
+            await msg.edit(f"Deleted {len(todelete)} invalid images!")
         else:
-            await ctx.send("No invalid images found!")
+            await msg.edit("No invalid images found!")
         self.cleanup = False
         await self.bot.change_presence(status=disnake.Status.online)
 
     @commands.has_guild_permissions(manage_guild=True)
-    @commands.command()
-    async def setartchannel(self, ctx, channel: disnake.TextChannel):
-        dbguild = self.bot.s.query(Guild).get(ctx.guild.id)
+    @art.sub_command()
+    async def setchannel(
+        self,
+        inter,
+        channel: disnake.TextChannel = Param(
+            description="Text channel to set as the art channel"
+        ),
+    ):
+        """Sets a Text channel as the art channel"""
+        dbguild = self.bot.s.query(Guild).get(inter.guild.id)
         dbguild.art_channel = channel.id
-        self.art_channel[ctx.guild.id] = channel.id
+        self.art_channel[inter.guild.id] = channel.id
         self.bot.s.commit()
-        await ctx.send(f"Set art channel to {channel.mention}")
+        await inter.response.send_message(f"Set art channel to {channel.mention}")
+
+    @commands.slash_command()
+    async def gallery(
+        self,
+        inter,
+        member: disnake.Member = Param(description="Member to check the gallery of"),
+    ):
+        """Show a user gallery"""
+        artist = self.get_artist(member)
+        if artist and artist.gallery:
+            view = GalleryView(inter, artist)
+            view.message = await inter.response.send_message(
+                embed=view.create_embed(), view=view, ephemeral=True
+            )
+        else:
+            await inter.response.send_message(
+                "This user doesnt have a gallery", ephemeral=True
+            )
+
+    @commands.slash_command()
+    async def artist(self, inter):
+        pass
+
+    @commands.has_guild_permissions(kick_members=True)
+    @commands.guild_only()
+    @artist.sub_command()
+    async def delete(
+        self,
+        inter,
+        member: disnake.Member = Param(description="Member to delete the gallery of"),
+    ):
+        """Deletes artist along with gallery"""
+        artist = self.get_artist(member)
+        if artist is None:
+            await inter.response.send_message(f"{member} doesnt have a gallery")
+            return
+        self.bot.s.delete(artist)
+        self.bot.s.commit()
+        await inter.response.send_message("Artist deleted")
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {exc}")

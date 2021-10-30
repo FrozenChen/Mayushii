@@ -126,6 +126,46 @@ class Mayushii(commands.Bot):
             if error_channel:
                 await error_channel.send(exc)
 
+    async def on_slash_command_error(self, inter, exc):
+        logger = self.logger
+        if inter.guild and (dbguild := self.s.query(Guild).get(inter.guild.id)):
+            error_channel = inter.guild.get_channel(dbguild.error_channel)
+        else:
+            error_channel = None
+
+        if isinstance(
+            exc,
+            (
+                commands.NoPrivateMessage,
+                exceptions.TooNew,
+                exceptions.NoOnGoingPoll,
+                exceptions.NoOnGoingRaffle,
+                exceptions.BlackListed,
+            ),
+        ):
+            await inter.response.send_message(exc, ephemeral=True)
+
+        elif isinstance(exc, commands.CheckFailure):
+            await inter.response.send_message(
+                f"You cannot use {inter.data.name}.", ephemeral=True
+            )
+
+        elif isinstance(exc, disnake.ext.commands.errors.CommandOnCooldown):
+            await inter.response.send_message(
+                f"This command is on cooldown, try again in {exc.retry_after:.2f}s.",
+                ephemeral=True,
+            )
+
+        else:
+            await inter.response.send_message(
+                f"Unhandled exception in `{inter.data.name}`", ephemeral=True
+            )
+            exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
+            logger.error(f"Unhandled exception occurred `{inter.data.name}`")
+            logger.debug(exc)
+            if error_channel:
+                await error_channel.send(exc)
+
     async def on_error(self, event, *args, **kwargs):
         self.logger.error(f"Error occurred in {event}", exc_info=exc_info())
 

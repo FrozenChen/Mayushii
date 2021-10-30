@@ -1,6 +1,7 @@
 import disnake
 
 from disnake.ext import commands
+from disnake.ext.commands import Param
 from utils.database import CommunityRole, Guild
 from utils.exceptions import DisabledCog
 from utils.utilities import gen_color
@@ -33,75 +34,98 @@ class Community(commands.Cog):
         for role in self.bot.s.query(CommunityRole).all():
             self.roles[role.guild].append(role)
 
-    @commands.command()
+    @commands.slash_command()
+    async def communityrole(self, inter):
+        pass
+
     @commands.cooldown(rate=1, per=20.0, type=commands.BucketType.member)
-    async def giveme(self, ctx, *, role_name=""):
+    @communityrole.sub_command()
+    async def giveme(
+        self, inter, role_name: str = Param(description="Name of the community role")
+    ):
         """Gives a community role to yourself."""
         if not (
             entry := self.bot.s.query(CommunityRole)
             .filter(
-                CommunityRole.alias == role_name, CommunityRole.guild == ctx.guild.id
+                CommunityRole.alias == role_name, CommunityRole.guild == inter.guild.id
             )
             .one_or_none()
         ):
-            ctx.command.reset_cooldown(ctx)
-            return await ctx.send(
-                f"Check the community roles with {self.bot.command_prefix}cr list"
+            inter.application_command.reset_cooldown(inter)
+            return await inter.response.send_message(
+                f"Check the community roles with `/community_roles list`",
+                ephemeral=True,
             )
-        role = ctx.guild.get_role(entry.id)
-        if role in ctx.author.roles:
-            return await ctx.send("You already have this role.")
+        role = inter.guild.get_role(entry.id)
+        if role in inter.author.roles:
+            return await inter.response.send_message(
+                "You already have this role.", ephemeral=True
+            )
         try:
-            await ctx.author.add_roles(role)
+            await inter.author.add_roles(role)
         except disnake.errors.Forbidden:
-            return await ctx.send("💢 I don't have permission to do this.")
-        await ctx.send(f"You now have the {role.name} role!")
+            return await inter.response.send_message(
+                "I can't add the role.", ephemeral=True
+            )
+        await inter.response.send_message(
+            f"You now have the {role.name} role!", ephemeral=True
+        )
 
-    @commands.command()
     @commands.cooldown(rate=1, per=20.0, type=commands.BucketType.member)
-    async def takeme(self, ctx, *, role_name=""):
+    @communityrole.sub_command()
+    async def takeme(
+        self, inter, role_name: str = Param(description="Name of the community role")
+    ):
         """Removes a community role from yourself"""
         if not (
             entry := self.bot.s.query(CommunityRole)
             .filter(
-                CommunityRole.alias == role_name, CommunityRole.guild == ctx.guild.id
+                CommunityRole.alias == role_name, CommunityRole.guild == inter.guild.id
             )
             .one_or_none()
         ):
-            ctx.command.reset_cooldown(ctx)
-            return await ctx.send(
-                f"Check the community roles with {self.bot.command_prefix}cr list"
+            inter.application_command.reset_cooldown(inter)
+            return await inter.response.send_message(
+                f"Check the community roles with {self.bot.command_prefix}cr list",
+                ephemeral=True,
             )
-        role = disnake.utils.get(ctx.author.roles, id=entry.id)
+        role = disnake.utils.get(inter.author.roles, id=entry.id)
         if not role:
-            return await ctx.send("You don't have this role")
+            return await inter.response.send_message("You don't have this role")
         try:
-            await ctx.author.remove_roles(role)
+            await inter.author.remove_roles(role)
         except disnake.errors.Forbidden:
-            return await ctx.send("💢 I don't have permission to do this.")
-        await ctx.send(f"{ctx.author.mention} The role has been removed!")
-
-    @commands.group(aliases=["cr"])
-    async def communityrole(self, ctx):
-        if ctx.invoked_subcommand is None:
-            await ctx.send_help(ctx.command)
+            return await inter.response.send_message(
+                "I can't remove the role.", ephemeral=True
+            )
+        await inter.response.send_message(
+            f"{inter.author.mention} The role has been removed!", ephemeral=True
+        )
 
     @commands.has_guild_permissions(manage_channels=True)
-    @communityrole.command()
-    async def add(self, ctx, alias: str, role: disnake.Role, *, description: str):
-        """Adds a server role as a community role"""
+    @communityrole.sub_command()
+    async def create(
+        self,
+        inter,
+        alias: str = Param(description="Alias for the new community role"),
+        role: disnake.Role = Param(description="Role which will be a community role"),
+        description: str = Param(description="Description for the role"),
+    ):
+        """Makes a server role as a community role"""
         if (
             self.bot.s.query(CommunityRole)
-            .filter(CommunityRole.alias == alias, CommunityRole.guild == ctx.guild.id)
+            .filter(CommunityRole.alias == alias, CommunityRole.guild == inter.guild.id)
             .one_or_none()
         ):
-            await ctx.send("This alias is already in use.")
-        elif self.bot.s.query(CommunityRole).get((role.id, ctx.guild.id)):
-            return await ctx.send("This role is a community role already.")
+            await inter.response.send_message("This alias is already in use.")
+        elif self.bot.s.query(CommunityRole).get((role.id, inter.guild.id)):
+            return await inter.response.send_message(
+                "This role is a community role already."
+            )
         self.bot.s.add(
             CommunityRole(
                 id=role.id,
-                guild=ctx.guild.id,
+                guild=inter.guild.id,
                 name=role.name,
                 alias=alias,
                 description=description,
@@ -109,28 +133,40 @@ class Community(commands.Cog):
         )
         self.bot.s.commit()
         self.load_roles()
-        await ctx.send("Added community role succesfully")
+        await inter.response.send_message("Added community role succesfully.")
 
     @commands.has_guild_permissions(manage_channels=True)
-    @communityrole.command(aliases=["delete"])
-    async def remove(self, ctx, role: disnake.Role):
-        """Removes a server role from the community roles"""
-        if not (entry := self.bot.s.query(CommunityRole).get((role.id, ctx.guild.id))):
-            return await ctx.send("This role is not a community role.")
+    @communityrole.sub_command()
+    async def delete(
+        self,
+        inter,
+        role: disnake.Role = Param(
+            description="Server role to delete as a community role"
+        ),
+    ):
+        """Deletes a server role from the community roles"""
+        if not (
+            entry := self.bot.s.query(CommunityRole).get((role.id, inter.guild.id))
+        ):
+            return await inter.response.send_message(
+                "This role is not a community role."
+            )
         self.bot.s.delete(entry)
         self.bot.s.commit()
         self.load_roles()
-        await ctx.send("Role removed succesfully")
+        await inter.response.send_message("Role removed succesfully.")
 
-    @communityrole.command()
-    async def list(self, ctx):
+    @communityrole.sub_command()
+    async def list(self, inter):
         """List the community roles"""
-        if not self.roles[ctx.guild.id]:
-            return await ctx.send("There is no community roles.")
-        embed = disnake.Embed(title="Community roles", colour=gen_color(ctx.author.id))
-        for role in self.roles[ctx.guild.id]:
+        if not self.roles[inter.guild.id]:
+            return await inter.response.send_message("There is no community roles.")
+        embed = disnake.Embed(
+            title="Community roles", colour=gen_color(inter.author.id)
+        )
+        for role in self.roles[inter.guild.id]:
             embed.add_field(name=role.alias, value=role.description)
-        await ctx.send(embed=embed)
+        await inter.response.send_message(embed=embed)
 
 
 def setup(bot):
