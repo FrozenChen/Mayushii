@@ -1,9 +1,11 @@
 import aiohttp
+import asyncio
 import disnake
 
 from disnake import ButtonStyle
 from disnake.ext import commands
 from disnake.ext.commands import Param
+from sqlalchemy.orm import contains_eager
 from utils.database import Art, Artist, BlackList, Guild
 from utils.exceptions import DisabledCog
 
@@ -209,19 +211,29 @@ class Gallery(commands.Cog):
             "Starting gallery cleanup (This might take a while)!"
         )
         await self.bot.change_presence(status=disnake.Status.dnd)
-        for art in (
-            self.bot.s.query(Art, Artist)
-            .filter(Art.artist_id == Artist.id)
+        arts = (
+            self.bot.s.query(Art)
+            .join(Art.artist)
             .filter(Artist.guild == inter.guild.id)
+            .options(contains_eager("artist"))
             .all()
-        ):
-            async with aiohttp.ClientSession() as session:
-                try:
-                    async with session.head(art["Art"].link) as resp:
-                        if resp.status == 403:
-                            todelete.append(art)
-                except aiohttp.InvalidURL:
-                    todelete.append(art)
+        )
+        tasks = []
+
+        async def head(url, s):
+            async with s.head(url) as r:
+                return r
+
+        async with aiohttp.ClientSession() as session:
+            for art in arts:
+                task = asyncio.ensure_future(head(art.link, session))
+                tasks.append(task)
+            responses = await asyncio.gather(*tasks)
+
+        for resp in responses:
+            if resp.status == 403:
+                todelete.append(art)
+
         if todelete:
             for art in todelete:
                 self.bot.s.delete(art)
