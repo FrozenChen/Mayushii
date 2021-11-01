@@ -156,11 +156,11 @@ class General(commands.Cog):
         self.bot.s.delete(user)
         await inter.response.send_message(f"Removed {member.mention} from blacklist!")
 
-    @commands.user_command()
-    async def avatar(self, inter):
-        """Get your own avatar"""
-        embed = disnake.Embed(title="Your avatar")
-        embed.set_image(url=inter.author.avatar.url)
+    @commands.user_command(name="Get pfp")
+    async def get_user_pfp(self, inter):
+        """Gets the user's pfp"""
+        embed = disnake.Embed(title=f"{inter.target}'s pfp")
+        embed.set_image(url=inter.target.display_avatar.url)
         await inter.response.send_message(embed=embed, ephemeral=True)
 
     async def cog_command_error(self, ctx, exc):
