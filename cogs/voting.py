@@ -104,11 +104,17 @@ class Voting(commands.Cog):
     def parse_options(options: str):
         return options.split(" | ")
 
+    @commands.guild_only()
+    @commands.slash_command()
+    async def poll(self, inter):
+        """Poll related commands."""
+        pass
+
     @commands.check(not_new)
     @commands.check(not_blacklisted)
     @commands.check(ongoing_poll)
     @commands.guild_only()
-    @commands.slash_command()
+    @poll.sub_command()
     async def vote(
         self,
         inter: disnake.ApplicationCommandInteraction,
@@ -123,12 +129,6 @@ class Voting(commands.Cog):
             return
         await self.queue.put((inter, vote))
         await self.process_vote()
-
-    @commands.guild_only()
-    @commands.slash_command()
-    async def poll(self, inter):
-        """Poll related commands."""
-        pass
 
     @commands.has_guild_permissions(manage_channels=True)
     @poll.sub_command()

@@ -262,7 +262,7 @@ class Gallery(commands.Cog):
         self.bot.s.commit()
         await inter.response.send_message(f"Set art channel to {channel.mention}")
 
-    @commands.slash_command()
+    @art.sub_command()
     async def gallery(
         self,
         inter,

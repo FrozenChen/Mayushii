@@ -3,6 +3,7 @@ import disnake
 import subprocess
 
 from disnake.ext import commands
+from disnake.ext.commands import Param
 from utils.database import Guild, BlackList
 from utils.exceptions import BotOwnerOnly
 
@@ -26,6 +27,10 @@ class General(commands.Cog):
         return True
 
     @commands.slash_command()
+    async def general(self, inter):
+        pass
+
+    @general.sub_command()
     async def about(self, inter):
         """About Mayushii"""
         embed = disnake.Embed(
@@ -37,15 +42,18 @@ class General(commands.Cog):
 
     @commands.check(bot_owner_only)
     @commands.slash_command()
+    async def control_bot(self, inter):
+        pass
+
+    @control_bot.sub_command()
     async def pull(self, inter):
         """Pull changes from repo"""
         await inter.response.send_message("Pulling changes")
         subprocess.run(["git", "pull"])
         await self.bot.close()
 
-    @commands.check(bot_owner_only)
-    @commands.slash_command()
-    async def load(self, inter, cog: str):
+    @control_bot.sub_command()
+    async def load(self, inter, cog: str = Param(description="Name of the cog")):
         """Load a cog"""
         try:
             self.bot.load_extension(f"cogs.{cog}")
@@ -55,9 +63,8 @@ class General(commands.Cog):
         except commands.ExtensionFailed:
             await inter.response.send_message(f"Error occurred when loading {cog}")
 
-    @commands.check(bot_owner_only)
-    @commands.slash_command()
-    async def unload(self, inter, cog: str):
+    @control_bot.sub_command()
+    async def unload(self, inter, cog: str = Param(description="Name of the cog")):
         """Unloads a cog"""
         try:
             self.bot.unload_extension(f"cogs.{cog}")
@@ -67,16 +74,16 @@ class General(commands.Cog):
                 f"Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```"
             )
 
-    @commands.check(bot_owner_only)
-    @commands.slash_command()
+    @control_bot.sub_command()
     async def quit(self, inter):
         """This kills the bot"""
         await inter.response.send_message("See you later!")
         await self.bot.close()
 
-    @commands.check(bot_owner_only)
-    @commands.slash_command()
-    async def changepfp(self, inter, url: str):
+    @control_bot.sub_command()
+    async def changepfp(
+        self, inter, url: str = Param(description="URL to the image to set as pfp")
+    ):
         """Change bot profile picture"""
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as r:
@@ -90,19 +97,21 @@ class General(commands.Cog):
                     "Profile picture changed successfully."
                 )
 
-    @commands.guild_only()
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.slash_command()
-    async def seterrchannel(self, inter, channel: disnake.TextChannel):
+    @control_bot.sub_command()
+    async def seterrchannel(
+        self,
+        inter,
+        channel: disnake.TextChannel = Param(
+            description="Channel to output error messages"
+        ),
+    ):
         """Set the channel to output errors"""
         dbguild = self.bot.s.query(Guild).get(inter.guild.id)
         dbguild.error_channel = channel.id
         self.bot.s.commit()
         await inter.response.send_message(f"Error Channel set to {channel.mention}")
 
-    @commands.guild_only()
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.slash_command()
+    @control_bot.sub_command()
     async def status(self, inter):
         """Shows the bot current guild status"""
         dbguild = self.bot.s.query(Guild).get(inter.guild.id)
@@ -118,10 +127,8 @@ class General(commands.Cog):
         )
         await inter.response.send_message(embed=embed)
 
-    @commands.guild_only()
-    @commands.has_guild_permissions(manage_guild=True)
-    @commands.slash_command()
-    async def togglecog(self, inter, cog: str):
+    @control_bot.sub_command()
+    async def togglecog(self, inter, cog: str = Param(description="Name of the cog")):
         """Enables or disables a cog"""
         if cog in self.cogs:
             dbguild = self.bot.s.query(Guild).get(inter.guild.id)
