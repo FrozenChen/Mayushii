@@ -169,8 +169,8 @@ class Gallery(commands.Cog):
             id = self.add_art(inter.author, link, description)
             await inter.response.send_message(f"Added art with id {id}!")
 
-    @art.sub_command()
-    async def delete(
+    @art.sub_command(name="delete")
+    async def art_delete(
         self, inter, art_id: int = Param(description="ID of the art to delete")
     ):
         """Removes image from user gallery"""
@@ -286,8 +286,8 @@ class Gallery(commands.Cog):
 
     @commands.has_guild_permissions(kick_members=True)
     @commands.guild_only()
-    @artist.sub_command()
-    async def delete(
+    @artist.sub_command(name="delete")
+    async def artist_delete(
         self,
         inter,
         member: disnake.Member = Param(description="Member to delete the gallery of"),
