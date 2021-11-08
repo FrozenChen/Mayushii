@@ -14,6 +14,5 @@ def not_new(ctx):
 
 async def not_blacklisted(ctx):
     if ctx.bot.s.query(BlackList).get((ctx.author.id, ctx.guild.id)):
-        await ctx.message.delete()
         raise BlackListed("You are blacklisted and cant use this command")
     return True
