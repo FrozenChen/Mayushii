@@ -7,7 +7,7 @@ from disnake.ext import commands
 from disnake.ext.commands import Param
 from sqlalchemy.orm import contains_eager
 from utils.database import Art, Artist, BlackList, Guild
-from utils.exceptions import DisabledCog
+from utils.exceptions import DisabledCog, NoArtChannel
 
 
 class GalleryView(disnake.ui.View):
@@ -85,11 +85,14 @@ class Gallery(commands.Cog):
         dbguild = self.bot.s.query(Guild).get(guild.id)
         return dbguild.flags & 0b10
 
-    async def cog_check(self, ctx):
-        if ctx.guild is None:
+    async def cog_check(self, inter):
+        if inter.guild is None:
             raise commands.NoPrivateMessage()
-        if not self.is_enabled(ctx.guild):
+        if not self.is_enabled(inter.guild):
             raise DisabledCog()
+        channel = self.art_channel.get(inter.guild.id)
+        if channel and inter.channel.id != channel:
+            raise NoArtChannel("This command can only be used in the art channel!")
         return True
 
     @commands.Cog.listener()
@@ -98,7 +101,7 @@ class Gallery(commands.Cog):
             message.channel, disnake.abc.PrivateChannel
         ) or not self.is_enabled(message.guild):
             return
-        if message.channel.id == self.art_channel[message.guild.id]:
+        if message.channel.id == self.art_channel.get(message.guild.id):
             count = 0
             added = []
             for attachment in message.attachments:
@@ -146,6 +149,7 @@ class Gallery(commands.Cog):
         self.logger.debug(f"Deleted art with id {art_id}")
         self.bot.s.commit()
 
+    @commands.guild_only()
     @commands.slash_command()
     async def art(self, inter):
         pass
@@ -190,7 +194,7 @@ class Gallery(commands.Cog):
             return
         elif (
             inter.author.id != art.artist.userid
-            and not inter.author.permissions_in(inter.channel).manage_nicknames
+            and not inter.channel.permissions_for(inter.author).manage_nicknames
         ):
             await inter.response.send_message("You cant delete other people art!")
             return
@@ -280,6 +284,7 @@ class Gallery(commands.Cog):
                 "This user doesnt have a gallery", ephemeral=True
             )
 
+    @commands.guild_only()
     @commands.slash_command()
     async def artist(self, inter):
         pass

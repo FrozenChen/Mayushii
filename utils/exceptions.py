@@ -23,3 +23,7 @@ class DisabledCog(commands.CheckFailure):
 
 class BotOwnerOnly(commands.CheckFailure):
     pass
+
+
+class NoArtChannel(commands.CheckFailure):
+    pass

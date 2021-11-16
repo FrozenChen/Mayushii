@@ -83,6 +83,7 @@ class Mayushii(commands.Bot):
                 exceptions.NoOnGoingPoll,
                 exceptions.NoOnGoingRaffle,
                 exceptions.BlackListed,
+                exceptions.NoArtChannel,
             ),
         ):
             await inter.response.send_message(exc, ephemeral=True)

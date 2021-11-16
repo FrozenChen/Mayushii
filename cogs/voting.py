@@ -266,7 +266,9 @@ class Voting(commands.Cog):
         """Shows info about current poll or provided poll id"""
         if poll_id is None:
             if self.get_current_poll(inter) is None:
-                await inter.response.send_message_help(inter.command)
+                await inter.response.send_message(
+                    "There is ongoing poll", ephemeral=True
+                )
                 return
             else:
                 poll_id = self.get_current_poll(inter).id
