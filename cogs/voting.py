@@ -72,7 +72,7 @@ class Voting(commands.Cog):
             voter = Voter(userid=inter.author.id, poll_id=poll.id, option=option)
             self.bot.s.add(voter)
             await inter.response.send_message(
-                f"Vote for {option} successfully!", ephemeral=True
+                f"Voted for {option} successfully!", ephemeral=True
             )
         else:
             old_vote = voter.option
