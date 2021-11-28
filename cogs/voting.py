@@ -150,16 +150,17 @@ class Voting(commands.Cog):
         await inter.response.send_message(
             "Is this poll correct?", view=view, embed=embed
         )
+        await view.wait()
         current_poll = self.get_current_poll(inter)
         if view.value:
             poll = self.create_poll(name, inter.guild.id, link, options)
             view = ConfirmationButtons()
-            msg = await inter.response.send_message(
-                f"Poll created successfully with id {poll.id}\nDo you want to activate it now?",
+            msg = await inter.edit_original_message(
+                content=f"Poll created successfully with id {poll.id}\nDo you want to activate it now?",
                 view=view,
+                embed=None,
             )
             await view.wait()
-            await msg.edit(view=None)
             if view.value:
                 if current_poll:
                     current_poll.active = False
@@ -167,9 +168,11 @@ class Voting(commands.Cog):
                 self.bot.s.commit()
                 self.logger.info(f"Enabled poll {poll.name}")
                 self.polls[inter.guild.id] = poll
-                await inter.response.send_message("Poll activated!")
+                await inter.edit_original_message(content="Poll activated!", view=None)
         else:
-            await inter.response.send_message("Alright then.")
+            await inter.edit_original_message(
+                content="Alright then.", view=None, embed=None
+            )
 
     @commands.has_guild_permissions(manage_channels=True)
     @poll.sub_command()
