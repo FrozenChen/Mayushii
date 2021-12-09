@@ -98,9 +98,7 @@ class Community(commands.Cog):
             return await inter.response.send_message(
                 "I can't remove the role.", ephemeral=True
             )
-        await inter.response.send_message(
-            f"{inter.author.mention} The role has been removed!", ephemeral=True
-        )
+        await inter.response.send_message(f"The role has been removed!", ephemeral=True)
 
     @commands.has_guild_permissions(manage_channels=True)
     @communityrole.sub_command()
