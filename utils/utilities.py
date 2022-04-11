@@ -1,39 +1,44 @@
-import disnake
+import re
+from datetime import datetime
+import discord
 import random
 import traceback
 
 # thanks ihaveahax
-def gen_color(seed) -> disnake.Color:
+from discord import app_commands
+
+
+def gen_color(seed) -> discord.Color:
     random.seed(seed)
     c_r = random.randint(0, 255)
     c_g = random.randint(0, 255)
     c_b = random.randint(0, 255)
-    return disnake.Color((c_r << 16) + (c_g << 8) + c_b)
+    return discord.Color((c_r << 16) + (c_g << 8) + c_b)
 
 
-class ConfirmationButtons(disnake.ui.View):
+class ConfirmationButtons(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=30)
         self.value = None
 
-    @disnake.ui.button(label="Yes", style=disnake.ButtonStyle.green)
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.green)
     async def confirm_button(
-        self, button: disnake.ui.Button, interaction: disnake.Interaction
+        self, button: discord.ui.Button, interaction: discord.Interaction
     ):
         self.value = True
         self.stop()
 
-    @disnake.ui.button(label="No", style=disnake.ButtonStyle.red)
+    @discord.ui.button(label="No", style=discord.ButtonStyle.red)
     async def deny_button(
-        self, button: disnake.ui.Button, interaction: disnake.Interaction
+        self, button: discord.ui.Button, interaction: discord.Interaction
     ):
         self.value = False
         self.stop()
 
 
-def create_error_embed(inter, exc) -> disnake.Embed:
-    embed = disnake.Embed(
-        title=f"Unexpected exception in command {inter.application_command.name}",
+def create_error_embed(interaction, exc) -> discord.Embed:
+    embed = discord.Embed(
+        title=f"Unexpected exception in command {interaction.command.name}",
         color=0xE50730,
     )
     trace = "".join(
@@ -43,7 +48,45 @@ def create_error_embed(inter, exc) -> disnake.Embed:
     embed.add_field(name="Exception Type", value=exc.__class__.__name__)
     embed.add_field(
         name="Information",
-        value=f"channel: {inter.channel.mention if isinstance(inter.channel, disnake.TextChannel) else 'Direct Message'}\ncommand: {inter.application_command.name}\nauthor: {inter.author.mention}",
+        value=f"channel: {interaction.channel.mention if isinstance(interaction.channel, discord.TextChannel) else 'Direct Message'}\ncommand: {interaction.command.name}\nauthor: {interaction.user.mention}",
         inline=False,
     )
     return embed
+
+
+def parse_time(time_string) -> int:
+    """Parses a time string in dhms format to seconds"""
+    # thanks Luc#5653
+    units = {"d": 86400, "h": 3600, "m": 60, "s": 1}
+    match = re.findall(
+        "([0-9]+[smhd])", time_string
+    )  # Thanks to 3dshax server's former bot
+    if not match:
+        return -1
+    return sum(int(item[:-1]) * units[item[-1]] for item in match)
+
+
+class TimeTransformer(app_commands.Transformer):
+    @classmethod
+    async def transform(cls, interaction: discord.Interaction, value: str) -> int:
+        seconds = parse_time(value)
+        if seconds > 0:
+            return seconds
+        raise app_commands.TransformerError(
+            "Invalid time format", discord.AppCommandOptionType.integer, cls
+        )
+
+
+class DateTransformer(app_commands.Transformer):
+    @classmethod
+    async def transform(cls, interaction: discord.Interaction, value: str) -> datetime:
+
+        data = value.split(" ")
+        if len(data) == 2:
+            return datetime.strptime(value, "%d/%m/%y %H:%M:%S")
+        elif len(data) == 1:
+            return datetime.strptime(value, "%d/%m/%y")
+        else:
+            raise app_commands.TransformerError(
+                "Invalid date format", discord.AppCommandOptionType.string, cls
+            )

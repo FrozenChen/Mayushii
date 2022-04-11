@@ -1,32 +1,25 @@
-import disnake
+import discord
 
-from disnake.ext import commands
-from disnake.ext.commands import Param
+from discord.ext import commands
+from discord import app_commands
 from utils.database import CommunityRole, Guild
-from utils.exceptions import DisabledCog
 from utils.utilities import gen_color
 
 
-class Community(commands.Cog):
+class Community(commands.Cog, app_commands.Group, name="communityrole"):
     """General commands for members."""
 
     def __init__(self, bot):
+        super().__init__()
         self.bot = bot
         self.logger = self.bot.get_logger(self)
         self.roles = {}
         self.load_roles()
 
     @staticmethod
-    def is_enabled(ctx):
-        dbguild = ctx.bot.s.query(Guild).get(ctx.guild.id)
+    def is_enabled(interaction):
+        dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
         return dbguild.flags & 0b1
-
-    async def cog_check(self, ctx):
-        if ctx.guild is None:
-            raise commands.NoPrivateMessage()
-        if not self.is_enabled(ctx):
-            raise DisabledCog()
-        return True
 
     def load_roles(self):
         self.roles = {}
@@ -34,96 +27,97 @@ class Community(commands.Cog):
         for role in self.bot.s.query(CommunityRole).all():
             self.roles[role.guild].append(role)
 
-    @commands.slash_command()
-    async def communityrole(self, inter):
-        pass
-
     @commands.cooldown(rate=1, per=20.0, type=commands.BucketType.member)
-    @communityrole.sub_command()
-    async def giveme(
-        self, inter, role_name: str = Param(description="Name of the community role")
-    ):
+    @app_commands.describe(role_name="Name of the community role")
+    @app_commands.command()
+    async def giveme(self, interaction, role_name: str):
         """Gives a community role to yourself."""
         if not (
             entry := self.bot.s.query(CommunityRole)
             .filter(
-                CommunityRole.alias == role_name, CommunityRole.guild == inter.guild.id
+                CommunityRole.alias == role_name,
+                CommunityRole.guild == interaction.guild.id,
             )
             .one_or_none()
         ):
-            inter.application_command.reset_cooldown(inter)
-            return await inter.response.send_message(
-                f"Check the community roles with `/community_roles list`",
+            return await interaction.response.send_message(
+                "Check the community roles with `/community_roles list`",
                 ephemeral=True,
             )
-        role = inter.guild.get_role(entry.id)
-        if role in inter.author.roles:
-            return await inter.response.send_message(
+        role = interaction.guild.get_role(entry.id)
+        if role in interaction.user.roles:
+            return await interaction.response.send_message(
                 "You already have this role.", ephemeral=True
             )
         try:
-            await inter.author.add_roles(role)
-        except disnake.errors.Forbidden:
-            return await inter.response.send_message(
+            await interaction.user.add_roles(role)
+        except discord.errors.Forbidden:
+            return await interaction.response.send_message(
                 "I can't add the role.", ephemeral=True
             )
-        await inter.response.send_message(
+        await interaction.response.send_message(
             f"You now have the {role.name} role!", ephemeral=True
         )
 
     @commands.cooldown(rate=1, per=20.0, type=commands.BucketType.member)
-    @communityrole.sub_command()
-    async def takeme(
-        self, inter, role_name: str = Param(description="Name of the community role")
-    ):
+    @app_commands.describe(role_name="Name of the community role")
+    @app_commands.command()
+    async def takeme(self, interaction, role_name: str):
         """Removes a community role from yourself"""
         if not (
             entry := self.bot.s.query(CommunityRole)
             .filter(
-                CommunityRole.alias == role_name, CommunityRole.guild == inter.guild.id
+                CommunityRole.alias == role_name,
+                CommunityRole.guild == interaction.guild.id,
             )
             .one_or_none()
         ):
-            inter.application_command.reset_cooldown(inter)
-            return await inter.response.send_message(
+
+            return await interaction.response.send_message(
                 f"Check the community roles with {self.bot.command_prefix}cr list",
                 ephemeral=True,
             )
-        role = disnake.utils.get(inter.author.roles, id=entry.id)
+        role = discord.utils.get(interaction.user.roles, id=entry.id)
         if not role:
-            return await inter.response.send_message("You don't have this role")
+            return await interaction.response.send_message("You don't have this role")
         try:
-            await inter.author.remove_roles(role)
-        except disnake.errors.Forbidden:
-            return await inter.response.send_message(
+            await interaction.user.remove_roles(role)
+        except discord.errors.Forbidden:
+            return await interaction.response.send_message(
                 "I can't remove the role.", ephemeral=True
             )
-        await inter.response.send_message(f"The role has been removed!", ephemeral=True)
+        await interaction.response.send_message(
+            f"The role has been removed!", ephemeral=True
+        )
 
-    @commands.has_guild_permissions(manage_channels=True)
-    @communityrole.sub_command()
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.describe(
+        alias="Alias for the new community role",
+        role="Role which will be a community role",
+        description="Description for the role",
+    )
+    @app_commands.command()
     async def create(
-        self,
-        inter,
-        alias: str = Param(description="Alias for the new community role"),
-        role: disnake.Role = Param(description="Role which will be a community role"),
-        description: str = Param(description="Description for the role"),
+        self, interaction, alias: str, role: discord.Role, description: str
     ):
         """Makes a server role as a community role"""
         if (
             self.bot.s.query(CommunityRole)
-            .filter(CommunityRole.alias == alias, CommunityRole.guild == inter.guild.id)
+            .filter(
+                CommunityRole.alias == alias,
+                CommunityRole.guild == interaction.guild.id,
+            )
             .one_or_none()
         ):
-            await inter.response.send_message("This alias is already in use.")
-        elif self.bot.s.query(CommunityRole).get((role.id, inter.guild.id)):
-            return await inter.response.send_message(
+            await interaction.response.send_message("This alias is already in use.")
+        elif self.bot.s.query(CommunityRole).get((role.id, interaction.guild.id)):
+            return await interaction.response.send_message(
                 "This role is a community role already."
             )
         self.bot.s.add(
             CommunityRole(
                 id=role.id,
-                guild=inter.guild.id,
+                guild=interaction.guild.id,
                 name=role.name,
                 alias=alias,
                 description=description,
@@ -131,41 +125,40 @@ class Community(commands.Cog):
         )
         self.bot.s.commit()
         self.load_roles()
-        await inter.response.send_message("Added community role succesfully.")
+        await interaction.response.send_message("Added community role succesfully.")
 
-    @commands.has_guild_permissions(manage_channels=True)
-    @communityrole.sub_command()
-    async def delete(
-        self,
-        inter,
-        role: disnake.Role = Param(
-            description="Server role to delete as a community role"
-        ),
-    ):
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.describe(role="Server role to delete as a community role")
+    @app_commands.command()
+    async def delete(self, interaction, role: discord.Role):
         """Deletes a server role from the community roles"""
         if not (
-            entry := self.bot.s.query(CommunityRole).get((role.id, inter.guild.id))
+            entry := self.bot.s.query(CommunityRole).get(
+                (role.id, interaction.guild.id)
+            )
         ):
-            return await inter.response.send_message(
+            return await interaction.response.send_message(
                 "This role is not a community role."
             )
         self.bot.s.delete(entry)
         self.bot.s.commit()
         self.load_roles()
-        await inter.response.send_message("Role removed succesfully.")
+        await interaction.response.send_message("Role removed succesfully.")
 
-    @communityrole.sub_command()
-    async def list(self, inter):
+    @app_commands.command()
+    async def list(self, interaction):
         """List the community roles"""
-        if not self.roles[inter.guild.id]:
-            return await inter.response.send_message("There is no community roles.")
-        embed = disnake.Embed(
-            title="Community roles", colour=gen_color(inter.author.id)
+        if not self.roles[interaction.guild.id]:
+            return await interaction.response.send_message(
+                "There is no community roles."
+            )
+        embed = discord.Embed(
+            title="Community roles", colour=gen_color(interaction.user.id)
         )
-        for role in self.roles[inter.guild.id]:
+        for role in self.roles[interaction.guild.id]:
             embed.add_field(name=role.alias, value=role.description)
-        await inter.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
 
-def setup(bot):
-    bot.add_cog(Community(bot))
+async def setup(bot):
+    await bot.add_cog(Community(bot))

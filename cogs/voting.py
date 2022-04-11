@@ -1,299 +1,255 @@
-import asyncio
-import disnake
-
-from disnake.ext import commands
-from disnake.ext.commands import Param
-from utils.database import Poll, Voter, Guild
-from utils.exceptions import NoOnGoingPoll, DisabledCog, TooNew, BlackListed
-from utils.checks import not_new, not_blacklisted
-from utils.utilities import ConfirmationButtons
-from typing import Union
+import discord
+import datetime
 
 
-class Voting(commands.Cog):
+from discord.ext import commands, tasks
+from discord import app_commands
+from utils.database import Poll, Guild
+from utils.utilities import ConfirmationButtons, TimeTransformer, DateTransformer
+from utils.views import VoteView, LinkButton
+from utils.managers import VoteManager
+
+
+class Voting(commands.Cog, app_commands.Group, name="poll"):
     """Commands for managing a poll."""
 
     def __init__(self, bot):
+        super().__init__()
         self.bot = bot
         self.logger = self.bot.get_logger(self)
-        self.polls = {
-            poll.guild: poll
-            for poll in self.bot.s.query(Poll).filter_by(active=True).all()
-        }
+        self.bot.poll_manager = VoteManager(self.bot)
 
-        self.queue = asyncio.Queue()
+    async def cog_load(self):
+        for guild, poll in self.bot.poll_manager.polls.items():
+            self.bot.add_view(
+                VoteView(
+                    options=poll.parsed_options,
+                    custom_id=poll.custom_id,
+                    guild_id=poll.guild_id,
+                    poll_manager=self.bot.poll_manager,
+                    channel_id=poll.channel_id,
+                )
+            )
+        self.check_views.start()
+
+    @tasks.loop(seconds=60.0)
+    async def check_views(self):
+        now = datetime.datetime.utcnow()
+        for poll in self.bot.poll_manager.polls.values():
+            if poll.end and poll.end < now:
+                view = discord.utils.get(
+                    self.bot.persistent_views, custom_id=poll.custom_id
+                )
+                await self.bot.poll_manager.end_poll(poll, view)
 
     @staticmethod
-    def is_enabled(ctx):
-        dbguild = ctx.bot.s.query(Guild).get(ctx.guild.id)
+    def is_enabled(interaction):
+        dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
         return dbguild.flags & 0b1000
 
-    async def cog_check(self, ctx):
-        if ctx.guild is None:
-            raise commands.NoPrivateMessage()
-        if not self.is_enabled(ctx):
-            raise DisabledCog()
-        return True
-
-    # Checks
-    def ongoing_poll(inter):
-        cog = inter.application_command.cog
-        if cog is None or cog.polls.get(inter.guild.id) is None:
-            raise NoOnGoingPoll(f"There is no ongoing poll")
-        return True
-
-    # Internal functions
-    def get_voter(self, member: disnake.Member):
-        return self.bot.s.query(Voter).get((member.id, self.polls[member.guild.id].id))
-
-    @staticmethod
-    def get_current_poll(inter):
-        return inter.application_command.cog.polls.get(inter.guild.id)
-
-    @staticmethod
-    def get_poll(inter, poll_id: str):
-        return (
-            inter.bot.s.query(Poll)
-            .filter(Poll.id == poll_id, Poll.guild == inter.guild.id)
-            .one_or_none()
-        )
-
-    def delete_vote(self, member: disnake.Member):
-        voter = self.get_voter(member)
-        if voter is not None:
-            self.bot.s.delete(voter)
-            self.bot.s.commit()
-
-    async def process_vote(self):
-        inter, option = await self.queue.get()
-        voter = self.get_voter(inter.author)
-        poll = self.polls.get(inter.guild_id)
-        if voter is None:
-            voter = Voter(userid=inter.author.id, poll_id=poll.id, option=option)
-            self.bot.s.add(voter)
-            await inter.response.send_message(
-                f"Voted for {option} successfully!", ephemeral=True
-            )
-        else:
-            old_vote = voter.option
-            voter.option = option
-            await inter.response.send_message(
-                f"Vote changed from {old_vote} to {voter.option}!", ephemeral=True
-            )
-        self.bot.s.commit()
-        self.queue.task_done()
-
-    def count_votes(self, poll: Poll):
-        result = {}
-        for option in self.parse_options(poll.options):
-            c = (
-                self.bot.s.query(Voter)
-                .filter_by(poll_id=poll.id, option=option)
-                .count()
-            )
-            result[option] = c
-        return result
-
-    def create_poll(self, name, guild: int, link: str, options: str):
-        poll = Poll(name=name, guild=guild, link=link, options=options)
-        self.bot.s.add(poll)
-        self.bot.s.commit()
-        return poll
-
-    @staticmethod
-    def parse_options(options: str):
-        return options.split(" | ")
-
-    @commands.guild_only()
-    @commands.slash_command()
-    async def poll(self, inter):
-        """Poll related commands."""
-        pass
-
-    @commands.check(not_new)
-    @commands.check(not_blacklisted)
-    @commands.check(ongoing_poll)
-    @commands.guild_only()
-    @poll.sub_command()
-    async def vote(
-        self,
-        inter: disnake.ApplicationCommandInteraction,
-        vote: str = Param(description="Your vote"),
-    ):
-        """Vote for the option you like"""
-        if vote not in self.parse_options(self.polls.get(inter.guild_id).options):
-            await inter.response.send_message(
-                f"Invalid option. Valid options: {' '.join(self.parse_options(self.polls.get(inter.guild_id).options))}",
-                ephemeral=True,
-            )
-            return
-        await self.queue.put((inter, vote))
-        await self.process_vote()
-
-    @commands.has_guild_permissions(manage_channels=True)
-    @poll.sub_command()
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.command()
+    @app_commands.describe(
+        name="Name of the new poll",
+        description="Link to the relevant image to the poll",
+        options="Options for the poll. Example A|B|C",
+        target_channel="Channel to post the poll",
+        end_date="End date of poll. dd/mm/yy hh:mm:ss format. Time is optional",
+        lasts="How long the poll lasts. #d#h#m#s format.",
+    )
     async def create(
         self,
-        inter,
-        name: str = Param(description="Name of the new poll"),
-        link: str = Param(description="Link to the relevant image to the poll"),
-        options: str = Param(description="Options for the poll. Example A | B | C"),
+        interaction: discord.Interaction,
+        name: str,
+        description: str,
+        message: str,
+        options: str,
+        target_channel: discord.TextChannel,
+        end_date: app_commands.Transform[datetime.datetime, DateTransformer] = None,
+        lasts: app_commands.Transform[int, TimeTransformer] = None,
+        url: str = None,
     ):
         """Creates a poll"""
-        embed = disnake.Embed(title="Proposed Poll", color=disnake.Color.green())
-        embed.add_field(name="Name", value=name, inline=False)
-        embed.add_field(name="Link", value=link, inline=False)
-        embed.add_field(
-            name="Options", value=" ".join(self.parse_options(options)), inline=False
-        )
-        view = ConfirmationButtons()
-        await inter.response.send_message(
-            "Is this poll correct?", view=view, embed=embed
-        )
-        await view.wait()
-        current_poll = self.get_current_poll(inter)
-        if view.value:
-            poll = self.create_poll(name, inter.guild.id, link, options)
-            view = ConfirmationButtons()
-            msg = await inter.edit_original_message(
-                content=f"Poll created successfully with id {poll.id}\nDo you want to activate it now?",
-                view=view,
-                embed=None,
+        if self.bot.poll_manager.get_ongoing_poll(interaction.guild_id):
+            return await interaction.response.send(
+                "There is an ongoing poll!", ephemeral=True
             )
-            await view.wait()
-            if view.value:
-                if current_poll:
-                    current_poll.active = False
-                poll.active = True
-                self.bot.s.commit()
-                self.logger.info(f"Enabled poll {poll.name}")
-                self.polls[inter.guild.id] = poll
-                await inter.edit_original_message(content="Poll activated!", view=None)
+        if lasts and end_date:
+            return await interaction.response.send_message(
+                "end_date and lasts parameters are mutually exclusive"
+            )
+        if lasts and lasts < 600:
+            return await interaction.response.send_message(
+                "A poll has to last longer than 10 minutes"
+            )
+        parsed_options = self.bot.poll_manager.parse_options(options)
+        embed = discord.Embed(title="Proposed Poll", color=discord.Color.green())
+        embed.add_field(name="Name", value=name, inline=False)
+        embed.add_field(name="Description", value=description, inline=False)
+        embed.add_field(name="Options", value=" ".join(parsed_options), inline=False)
+        conf_view = ConfirmationButtons()
+        await interaction.response.send_message(
+            "Is this poll correct?", view=conf_view, embed=embed, ephemeral=True
+        )
+        await conf_view.wait()
+        if conf_view.value:
+            start = datetime.datetime.utcnow()
+            if lasts or end_date:
+                if lasts:
+                    diff = datetime.timedelta(seconds=lasts)
+                    end_date = start + diff
+                if end_date < start or (end_date - start).total_seconds() < 600:
+                    return await interaction.edit_original_message(
+                        content="A poll has to last longer than 10 minutes",
+                        view=None,
+                        embed=None,
+                    )
+            vote_view = VoteView(
+                options=parsed_options,
+                custom_id=interaction.id,
+                guild_id=interaction.guild_id,
+                poll_manager=self.bot.poll_manager,
+                channel_id=target_channel.id,
+            )
+            if url:
+                vote_view.add_item(LinkButton(label="Gallery", url=url))
+            msg = await target_channel.send("Loading", view=vote_view)
+            poll = self.bot.poll_manager.create_poll(
+                name=name,
+                options=options,
+                guild_id=interaction.guild_id,
+                message_id=msg.id,
+                url=url,
+                author_id=interaction.user.id,
+                custom_id=interaction.id,
+                description=description,
+                start=start,
+                end=end_date,
+                channel_id=msg.channel.id,
+            )
+            await msg.edit(
+                content=None,
+                embed=self.bot.poll_manager.create_embed(poll, description=message),
+            )
+            poll.active = True
+            self.bot.s.commit()
+            self.logger.info(f"Enabled poll {poll.name}")
+            self.bot.poll_manager.polls[interaction.guild.id] = poll
+            await interaction.edit_original_message(
+                content="Poll Created!", view=None, embed=None
+            )
         else:
-            await inter.edit_original_message(
+            await interaction.edit_original_message(
                 content="Alright then.", view=None, embed=None
             )
 
-    @commands.has_guild_permissions(manage_channels=True)
-    @poll.sub_command()
-    async def activate(
-        self, inter, poll_id: int = Param(description="ID of the poll to activate")
-    ):
-        """Activates a poll"""
-        poll = (
-            self.bot.s.query(Poll)
-            .filter(Poll.guild == inter.guild.id, Poll.id == poll_id)
-            .one_or_none()
-        )
-        if poll is None:
-            return await inter.response.send_message("No poll with the provided id")
-        current_poll = self.get_current_poll(inter)
-        if self.get_current_poll(inter) is not None:
-            current_poll.active = False
-        poll.active = True
-        self.bot.s.commit()
-        self.logger.info(f"Enabled poll {poll.name}")
-        await inter.response.send_message(f"Enabled poll {poll.name}")
-        self.polls[inter.guild.id] = poll
-
-    @commands.has_guild_permissions(manage_channels=True)
-    @poll.sub_command()
-    async def close(self, inter):
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.command()
+    async def close(self, interaction: discord.Interaction):
         """Closes a poll"""
-        if (poll := self.get_current_poll(inter)) is None:
-            return await inter.response.send_message("No ongoing poll")
-        poll.active = False
-        self.bot.s.commit()
-        del self.polls[inter.guild.id]
-        await inter.response.send_message("Poll closed successfully")
+        if (
+            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id)
+        ) is None:
+            return await interaction.response.send_message("No ongoing poll")
 
-    @commands.has_guild_permissions(manage_nicknames=True)
-    @poll.sub_command()
-    async def tally(self, inter):
+        view = discord.utils.get(self.bot.persistent_views, custom_id=poll.custom_id)
+        await self.bot.poll_manager.end_poll(poll, view)
+        await interaction.response.send_message("Poll closed successfully")
+
+    @app_commands.checks.has_permissions(manage_nicknames=True)
+    @app_commands.command()
+    async def tally(self, interaction: discord.Interaction):
         """Show the current state of the poll"""
-        if self.get_current_poll(inter) is None:
-            return await inter.response.send_message("No ongoing poll")
-        result = self.count_votes(self.get_current_poll(inter))
-        embed = disnake.Embed()
+        if poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id) is None:
+            return await interaction.response.send_message("There is no ongoing poll")
+        result = self.bot.poll_manager.count_votes(poll)
+        embed = discord.Embed()
         msg = ""
         for x in result.keys():
             msg += f"{x}: {result[x]}   "
         embed.add_field(name="Votes", value=msg, inline=False)
-        await inter.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @commands.has_guild_permissions(manage_channels=True)
-    @poll.sub_command()
-    async def list(self, inter):
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.command()
+    async def list(self, interaction: discord.Interaction):
         """Shows a list with current and past polls"""
-        polls = self.bot.s.query(Poll).filter(Poll.guild == inter.guild.id).all()
+        polls = (
+            self.bot.s.query(Poll).filter(Poll.guild_id == interaction.guild.id).all()
+        )
         if polls:
-            embed = disnake.Embed(title="Poll List")
+            embed = discord.Embed(title="Poll List")
             for poll in polls:
                 msg = (
                     f"id={poll.id}\n"
-                    f"link={poll.link}\n"
+                    f"link={poll.description}\n"
                     f"option={poll.options}\n"
                     f"active={poll.active}\n"
                     f"votes={len(poll.voters)}\n"
                 )
                 embed.add_field(name=poll.name, value=msg)
-            await inter.response.send_message(embed=embed)
+            await interaction.response.send_message(embed=embed)
         else:
-            await inter.response.send_message("No polls to show!")
+            await interaction.response.send_message("No polls to show!")
 
-    @commands.has_guild_permissions(manage_guild=True)
-    @poll.sub_command()
-    async def delete(
-        self, inter, poll_id: int = Param(description="ID of the poll to delete")
-    ):
+    @app_commands.checks.has_permissions(manage_guild=True)
+    @app_commands.command()
+    async def delete(self, interaction: discord.Interaction, poll_id: int):
         """Deletes a poll"""
         poll = (
             self.bot.s.query(Poll)
-            .filter(Poll.id == poll_id, Poll.guild == inter.guild.id)
+            .filter(Poll.id == poll_id, Poll.guild_id == interaction.guild.id)
             .first()
         )
         if not poll:
-            await inter.response.send_message("No poll associated with provided ID")
+            await interaction.response.send_message(
+                "No poll associated with provided ID"
+            )
         else:
-            if poll == self.get_current_poll(inter):
-                del self.polls[inter.guild.id]
+            if poll == self.bot.poll_manager.get_ongoing_poll(interaction.guild_id):
+                del self.bot.poll_manager.polls[interaction.guild.id]
             self.bot.s.delete(poll)
             self.bot.s.commit()
-            await inter.response.send_message("Poll deleted successfully")
+            await interaction.response.send_message("Poll deleted successfully")
 
-    @commands.has_guild_permissions(manage_nicknames=True)
-    @poll.sub_command()
-    async def info(
-        self, inter, poll_id: int = Param(default=None, description="ID of the poll")
-    ):
+    @app_commands.checks.has_permissions(manage_nicknames=True)
+    @app_commands.command()
+    async def info(self, interaction: discord.Interaction, poll_id: int = None):
         """Shows info about current poll or provided poll id"""
         if poll_id is None:
-            if self.get_current_poll(inter) is None:
-                await inter.response.send_message(
-                    "There is ongoing poll", ephemeral=True
+            if self.bot.poll_manager.get_ongoing_poll(interaction.guild_id) is None:
+                await interaction.response.send_message(
+                    "There is no ongoing poll", ephemeral=True
                 )
                 return
             else:
-                poll_id = self.get_current_poll(inter).id
-        poll = self.get_poll(inter, poll_id)
-        embed = disnake.Embed(title=poll.name, color=disnake.Color.blurple())
+                poll_id = self.bot.poll_manager.get_ongoing_poll(
+                    interaction.guild_id
+                ).id
+        poll = self.bot.poll_manager.get_poll(poll_id, interaction.guild_id)
+        embed = discord.Embed(title=poll.name, color=discord.Color.blurple())
         embed.add_field(name="ID", value=poll.id, inline=False)
-        embed.add_field(name="Link", value=poll.link, inline=False)
+        if poll.url:
+            embed.add_field(name="Link", value=poll.url, inline=False)
         embed.add_field(
             name="Options",
-            value=" ".join(self.parse_options(poll.options)),
+            value=" ".join(self.bot.poll_manager.parse_options(poll.options)),
             inline=False,
         )
-        result = self.count_votes(poll)
+        if poll.end:
+            embed.add_field(
+                name="End date", value=discord.utils.format_dt(poll.end, "F")
+            )
+        result = self.bot.poll_manager.count_votes(poll)
         msg = ""
         for x in result.keys():
             msg += f"{x}: {result[x]}   "
         embed.add_field(name="Votes", value=msg, inline=False)
-        await inter.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
 
 
-def setup(bot):
-    bot.add_cog(Voting(bot))
+async def setup(bot):
+    await bot.add_cog(Voting(bot))

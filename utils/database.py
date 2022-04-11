@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, Boolean
+from sqlalchemy import Column, String, Integer, ForeignKey, Boolean, TIMESTAMP
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -57,17 +57,32 @@ class Guild(Base):
 class Poll(Base):
     __tablename__ = "polls"
     id = Column(Integer, primary_key=True)
-    guild = Column(Integer, ForeignKey("guilds.id"))
+
     name = Column(String)
-    link = Column(String)
+    description = Column(String)
     options = Column(String)
+    url = Column(String)
+
+    custom_id = Column(Integer)
+    guild_id = Column(Integer, ForeignKey("guilds.id"))
+    message_id = Column(Integer)
+    author_id = Column(Integer)
+    channel_id = Column(Integer)
+
     active = Column(Boolean, default=False)
+    start = Column(TIMESTAMP)
+    end = Column(TIMESTAMP)
+
     voters = relationship(
         "Voter", back_populates="poll", cascade="all, delete, delete-orphan"
     )
 
     def __repr__(self):
-        return f"<Poll id={self.id}, name={self.name}, link={self.link}, options={self.options}, active={self.active}'>"
+        return f"<Poll id={self.id}, name={self.name}, description={self.description}, options={self.options}, active={self.active}'>"
+
+    @property
+    def parsed_options(self):
+        return self.options.split("|")
 
 
 class Voter(Base):

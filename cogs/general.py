@@ -1,11 +1,19 @@
 import aiohttp
-import disnake
+import discord
 import subprocess
 
-from disnake.ext import commands
-from disnake.ext.commands import Param
+from discord import app_commands
+from discord.ext import commands
+
+from main import Mayushii
 from utils.database import Guild, BlackList
 from utils.exceptions import BotOwnerOnly
+
+
+def bot_owner_only(interaction):
+    if interaction.user.id != interaction.client.owner_id:
+        raise BotOwnerOnly()
+    return True
 
 
 class General(commands.Cog):
@@ -21,102 +29,93 @@ class General(commands.Cog):
             "voting": 0b1000,
         }
 
-    def bot_owner_only(inter):
-        if inter.author.id != inter.bot.owner_id:
-            raise BotOwnerOnly()
-        return True
-
-    @commands.slash_command()
-    async def general(self, inter):
-        pass
-
-    @general.sub_command()
-    async def about(self, inter):
+    @app_commands.command()
+    async def about(self, interaction):
         """About Mayushii"""
-        embed = disnake.Embed(
+        embed = discord.Embed(
             title="Mayushii", url="https://github.com/FrozenChen/Mayushii"
         )
         embed.description = "A bot for Nintendo Homebrew artistic channel."
         embed.set_thumbnail(url="https://files.frozenchen.me/vD7vM.png")
-        await inter.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @commands.check(bot_owner_only)
-    @commands.slash_command()
-    async def control_bot(self, inter):
-        pass
+    group_bot = app_commands.Group(name="bot", description="Bot commands")
 
-    @control_bot.sub_command()
-    async def pull(self, inter):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def pull(self, interaction):
         """Pull changes from repo"""
-        await inter.response.send_message("Pulling changes")
+        await interaction.response.send_message("Pulling changes")
         subprocess.run(["git", "pull"])
         await self.bot.close()
 
-    @control_bot.sub_command()
-    async def load(self, inter, cog: str = Param(description="Name of the cog")):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def load(self, interaction, cog: str):
         """Load a cog"""
         try:
-            self.bot.load_extension(f"cogs.{cog}")
-            await inter.response.send_message(f"Loaded `{cog}``!")
+            await self.bot.load_extension(f"cogs.{cog}")
+            await interaction.response.send_message(f"Loaded `{cog}`!")
         except commands.ExtensionNotFound:
-            await inter.response.send_message(f"Extension {cog} not found")
+            await interaction.response.send_message(f"Extension {cog} not found")
         except commands.ExtensionFailed:
-            await inter.response.send_message(f"Error occurred when loading {cog}")
+            await interaction.response.send_message(
+                f"Error occurred when loading {cog}"
+            )
 
-    @control_bot.sub_command()
-    async def unload(self, inter, cog: str = Param(description="Name of the cog")):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def unload(self, interaction, cog: str):
         """Unloads a cog"""
         try:
-            self.bot.unload_extension(f"cogs.{cog}")
-            await inter.response.send_message(f"Unloaded {cog}!")
+            await self.bot.unload_extension(f"cogs.{cog}")
+            await interaction.response.send_message(f"Unloaded {cog}!")
         except Exception as exc:
-            await inter.response.send_message(
+            await interaction.response.send_message(
                 f"Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```"
             )
 
-    @control_bot.sub_command()
-    async def quit(self, inter):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def quit(self, interaction):
         """This kills the bot"""
-        await inter.response.send_message("See you later!")
+        await interaction.response.send_message("See you later!")
         await self.bot.close()
 
-    @control_bot.sub_command()
-    async def changepfp(
-        self, inter, url: str = Param(description="URL to the image to set as pfp")
-    ):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def changepfp(self, interaction, url: str):
         """Change bot profile picture"""
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as r:
                 if r.status != 200:
-                    return await inter.response.send_message(
+                    return await interaction.response.send_message(
                         "Failed to retrieve image!"
                     )
                 data = await r.read()
                 await self.bot.user.edit(avatar=data)
-                await inter.response.send_message.send(
+                await interaction.response.send_message.send(
                     "Profile picture changed successfully."
                 )
 
-    @control_bot.sub_command()
-    async def seterrchannel(
-        self,
-        inter,
-        channel: disnake.TextChannel = Param(
-            description="Channel to output error messages"
-        ),
-    ):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def seterrchannel(self, interaction, channel: discord.TextChannel):
         """Set the channel to output errors"""
-        dbguild = self.bot.s.query(Guild).get(inter.guild.id)
+        dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
         dbguild.error_channel = channel.id
         self.bot.s.commit()
-        await inter.response.send_message(f"Error Channel set to {channel.mention}")
+        await interaction.response.send_message(
+            f"Error Channel set to {channel.mention}"
+        )
 
-    @control_bot.sub_command()
-    async def status(self, inter):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def status(self, interaction):
         """Shows the bot current guild status"""
-        dbguild = self.bot.s.query(Guild).get(inter.guild.id)
-        embed = disnake.Embed()
-        embed.add_field(name="Guild", value=f"{inter.guild.name}", inline=False)
+        dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
+        embed = discord.Embed()
+        embed.add_field(name="Guild", value=f"{interaction.guild.name}", inline=False)
         embed.add_field(
             name="Cogs",
             value="\n".join(
@@ -125,54 +124,49 @@ class General(commands.Cog):
             ),
             inline=False,
         )
-        await inter.response.send_message(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @control_bot.sub_command()
-    async def togglecog(self, inter, cog: str = Param(description="Name of the cog")):
+    @app_commands.check(bot_owner_only)
+    @group_bot.command()
+    async def togglecog(self, interaction, cog: str):
         """Enables or disables a cog"""
         if cog in self.cogs:
-            dbguild = self.bot.s.query(Guild).get(inter.guild.id)
+            dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
             dbguild.flags ^= self.cogs[cog]
             self.bot.s.commit()
-            return await inter.response.send_message("Cog toggled.")
-        await inter.response.send_message("Cog not found.")
+            return await interaction.response.send_message("Cog toggled.")
+        await interaction.response.send_message("Cog not found.")
 
-    @commands.guild_only()
-    @commands.check(bot_owner_only)
-    @commands.slash_command()
-    async def blacklist(self, inter):
-        """Commands for the blacklist"""
-        pass
+    blacklist = app_commands.Group(
+        name="blacklist", description="Commands for the blacklist"
+    )
 
-    @blacklist.sub_command(name="add")
-    async def blacklist_add(self, inter, member: disnake.Member):
+    @app_commands.check(bot_owner_only)
+    @blacklist.command(name="add")
+    async def blacklist_add(self, interaction, member: discord.Member):
         """Adds member to blacklist"""
-        if self.bot.s.query(BlackList).get((member.id, inter.guild.id)):
-            await inter.response.send_message("User is already blacklisted")
+        if self.bot.s.query(BlackList).get((member.id, interaction.guild.id)):
+            await interaction.response.send_message("User is already blacklisted")
             return
-        self.bot.s.add(BlackList(userid=member.id, guild=inter.guild.id))
-        await inter.response.send_message(f"Blacklisted {member.mention}!")
+        self.bot.s.add(BlackList(userid=member.id, guild=interaction.guild.id))
+        await interaction.response.send_message(f"Blacklisted {member.mention}!")
 
-    @blacklist.sub_command(name="remove")
-    async def blacklist_remove(self, inter, member: disnake.Member):
+    @app_commands.check(bot_owner_only)
+    @blacklist.command(name="remove")
+    async def blacklist_remove(self, interaction, member: discord.Member):
         """Removes member from blacklist."""
-        user = self.bot.s.query(BlackList).get((member.id, inter.guild.id))
+        user = self.bot.s.query(BlackList).get((member.id, interaction.guild.id))
         if not user:
-            await inter.response.send_message("User is not blacklisted")
+            await interaction.response.send_message("User is not blacklisted")
             return
         self.bot.s.delete(user)
-        await inter.response.send_message(f"Removed {member.mention} from blacklist!")
-
-    @commands.user_command(name="Get pfp")
-    async def get_user_pfp(self, inter):
-        """Gets the user's pfp"""
-        embed = disnake.Embed(title=f"{inter.target}'s pfp")
-        embed.set_image(url=inter.target.display_avatar.url)
-        await inter.response.send_message(embed=embed, ephemeral=True)
+        await interaction.response.send_message(
+            f"Removed {member.mention} from blacklist!"
+        )
 
     async def cog_command_error(self, ctx, exc):
         self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
 
 
-def setup(bot):
-    bot.add_cog(General(bot))
+async def setup(bot: Mayushii):
+    await bot.add_cog(General(bot))

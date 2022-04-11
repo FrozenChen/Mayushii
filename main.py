@@ -1,14 +1,15 @@
-import disnake
+import discord
 import logging
 import json
 
-from disnake.ext import commands
+from discord import app_commands
+from discord.app_commands import ContextMenu, Command
+from discord.ext import commands
+from typing import Union
 from traceback import format_exception
-from sys import exc_info
 from utils import exceptions
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from utils.database import Guild, Base
 from utils.exceptions import DisabledCog, BotOwnerOnly
 from utils.utilities import create_error_embed
@@ -19,7 +20,7 @@ cogs = ["cogs.gallery", "cogs.general", "cogs.voting", "cogs.raffle", "cogs.comm
 class Mayushii(commands.Bot):
     def __init__(self, command_prefix, **options):
         super().__init__(command_prefix, **options)
-        self.logger = self.get_logger(self)
+        self.logger = self.get_logger(self.__class__)
         self.logger.info("Loading config.json")
         with open("data/config.json") as config:
             self.config = json.load(config)
@@ -52,33 +53,101 @@ class Mayushii(commands.Bot):
             if not self.s.query(Guild).get(guild.id):
                 self.s.add(Guild(id=guild.id, name=guild.name))
             self.s.commit()
-        self.load_cogs()
+        await self.load_cogs()
+        await self.tree.sync()
         self.logger.info(f"Initialized on {','.join(x.name for x in self.guilds)}")
 
-    def load_cogs(self):
+    async def load_cogs(self):
         for cog in cogs:
             try:
-                self.load_extension(cog)
+                await self.load_extension(cog)
                 self.logger.info(f"Loaded {cog}")
             except commands.ExtensionNotFound:
                 self.logger.error(f"Extension {cog} not found")
-            except commands.ExtensionFailed as exc:
-                self.logger.error(f"Error occurred when loading {cog}")
-                self.logger.debug(
-                    f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
-                )
 
-    async def on_slash_command_error(self, inter, exc):
-        logger = self.logger
-        if inter.guild and (dbguild := self.s.query(Guild).get(inter.guild.id)):
-            error_channel = inter.guild.get_channel(dbguild.error_channel)
+    def get_error_channel(self, interaction):
+        if dbguild := self.s.query(Guild).get(interaction.guild.id):
+            error_channel = interaction.guild.get_channel(dbguild.error_channel)
         else:
             error_channel = None
+        return error_channel
 
-        if isinstance(
+    async def on_command_error(self, ctx, exc):
+        logger = self.logger if ctx.cog is None else ctx.cog.logger
+
+        error_channel = self.get_error_channel(ctx)
+
+        if isinstance(exc, (commands.CommandNotFound, DisabledCog, BotOwnerOnly)):
+            return
+
+        elif isinstance(
             exc,
             (
                 commands.NoPrivateMessage,
+                exceptions.TooNew,
+                exceptions.NoOnGoingPoll,
+                exceptions.NoOnGoingRaffle,
+            ),
+        ):
+            await ctx.send(exc)
+
+        elif isinstance(exc, exceptions.BlackListed):
+            await ctx.author.send(exc)
+
+        elif isinstance(exc, commands.CheckFailure):
+            await ctx.send(f"You cannot use {ctx.command}.")
+
+        elif isinstance(exc, commands.BadArgument):
+            await ctx.send(f"Bad argument in {ctx.command}: `{exc}`")
+            await ctx.send_help(ctx.command)
+
+        elif isinstance(exc, commands.MissingRequiredArgument):
+            await ctx.send(exc)
+            await ctx.send_help(ctx.command)
+        elif isinstance(exc, discord.ext.commands.errors.CommandOnCooldown):
+            await ctx.send(
+                f"This command is on cooldown, try again in {exc.retry_after:.2f}s.",
+                delete_after=10,
+            )
+
+        elif isinstance(exc, commands.CommandInvokeError):
+            if isinstance(exc.original, discord.Forbidden):
+                await ctx.send("I can't do this!")
+            else:
+                await ctx.send(f"`{ctx.command}` caused an exception.")
+                exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
+                logger.error(f"Exception occurred in {ctx.command}")
+                logger.debug(exc)
+                if error_channel:
+                    await error_channel.send(exc)
+
+        else:
+            await ctx.send(f"Unhandled exception in `{ctx.command}`")
+            exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
+            logger.error(f"Unhandled exception occurred in {ctx.command}")
+            logger.debug(exc)
+            if error_channel:
+                await error_channel.send(exc)
+
+
+class Mayutree(app_commands.CommandTree):
+    def __init__(self, client):
+        super().__init__(client)
+        self.err_channel = None
+        self.logger = logging.getLogger(__name__)
+
+    async def on_error(
+        self,
+        interaction: discord.Interaction,
+        command: Union[ContextMenu, Command, None],
+        error: app_commands.AppCommandError,
+    ):
+        logger = self.logger
+        error_channel = interaction.client.get_error_channel(interaction)
+        command_name = interaction.command.name if interaction.command else "unknown"
+        if isinstance(
+            error,
+            (
                 exceptions.TooNew,
                 exceptions.NoOnGoingPoll,
                 exceptions.NoOnGoingRaffle,
@@ -86,45 +155,46 @@ class Mayushii(commands.Bot):
                 exceptions.NoArtChannel,
             ),
         ):
-            await inter.response.send_message(exc, ephemeral=True)
+            await interaction.response.send_message(error, ephemeral=True)
 
-        elif isinstance(exc, commands.CheckFailure):
-            await inter.response.send_message(
-                f"You cannot use {inter.data.name}.", ephemeral=True
+        elif isinstance(error, app_commands.CheckFailure):
+            await interaction.response.send_message(
+                f"You cannot use {command_name}.", ephemeral=True
             )
 
-        elif isinstance(exc, disnake.ext.commands.errors.CommandOnCooldown):
-            await inter.response.send_message(
-                f"This command is on cooldown, try again in {exc.retry_after:.2f}s.",
+        elif isinstance(error, app_commands.CommandOnCooldown):
+            await interaction.response.send_message(
+                f"This command is on cooldown, try again in {error.retry_after:.2f}s.",
                 ephemeral=True,
             )
 
         else:
-            msg = f"Unhandled exception in `{inter.data.name}`"
+            msg = f"Unhandled exception in `{command_name}`"
             try:
-                if inter.response.is_done():
-                    await inter.edit_original_message(
+                if interaction.response.is_done():
+                    await interaction.edit_original_message(
                         content=msg, embed=None, view=None
                     )
                 else:
-                    await inter.response.send_message(msg, ephemeral=True)
+                    await interaction.response.send_message(msg, ephemeral=True)
             except Exception:
                 pass
-            embed = create_error_embed(inter, exc)
-            exc_text = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
-            logger.error(f"Unhandled exception occurred `{inter.data.name}`")
+            embed = create_error_embed(interaction, error)
+            exc_text = (
+                f"{''.join(format_exception(type(error), error, error.__traceback__))}"
+            )
+            logger.error(f"Unhandled exception occurred `{command_name}`")
             logger.debug(exc_text)
             if error_channel:
                 await error_channel.send(embed=embed)
 
-    async def on_error(self, event, *args, **kwargs):
-        self.logger.error(f"Error occurred in {event}", exc_info=exc_info())
 
-
-intents = disnake.Intents(guilds=True, members=True, messages=True, reactions=True)
-bot = Mayushii(
-    command_prefix="$",
-    description="A bot for Nintendo Homebrew artistic channel",
-    intents=intents,
-)
-bot.run(bot.config["token"])
+if __name__ == "__main__":
+    intents = discord.Intents().all()
+    bot = Mayushii(
+        command_prefix="$",
+        description="A bot for Nintendo Homebrew artistic channel",
+        intents=intents,
+        tree_cls=Mayutree,
+    )
+    bot.run(bot.config["token"])
