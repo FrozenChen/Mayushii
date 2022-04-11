@@ -155,7 +155,7 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
         await self.bot.poll_manager.end_poll(poll, view)
         await interaction.response.send_message("Poll closed successfully")
 
-    @app_commands.checks.has_permissions(manage_nicknames=True)
+    @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.command()
     async def tally(self, interaction: discord.Interaction):
         """Show the current state of the poll"""
@@ -211,7 +211,7 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
             self.bot.s.commit()
             await interaction.response.send_message("Poll deleted successfully")
 
-    @app_commands.checks.has_permissions(manage_nicknames=True)
+    @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.command()
     async def info(self, interaction: discord.Interaction, poll_id: int = None):
         """Shows info about current poll or provided poll id"""
