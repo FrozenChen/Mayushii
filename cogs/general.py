@@ -58,9 +58,9 @@ class General(commands.Cog):
             await interaction.response.send_message(f"Loaded `{cog}`!")
         except commands.ExtensionNotFound:
             await interaction.response.send_message(f"Extension {cog} not found")
-        except commands.ExtensionFailed:
+        except commands.ExtensionFailed as exc:
             await interaction.response.send_message(
-                f"Error occurred when loading {cog}"
+                f"Failed to load cog!```\n{type(exc).__name__}: {exc}\n```"
             )
 
     @app_commands.check(bot_owner_only)
