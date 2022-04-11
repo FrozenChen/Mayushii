@@ -89,15 +89,9 @@ class Gallery(commands.Cog):
         dbguild = self.bot.s.query(Guild).get(guild.id)
         return dbguild.flags & 0b10
 
-    async def cog_check(self, interaction):
-        if interaction.guild is None:
-            raise commands.NoPrivateMessage()
-        if not self.is_enabled(interaction.guild):
-            raise DisabledCog()
-        channel = self.art_channel.get(interaction.guild.id)
-        if channel and interaction.channel.id != channel:
-            raise NoArtChannel("This command can only be used in the art channel!")
-        return True
+    async def no_cleanup(self):
+        while self.cleanup:
+            pass
 
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -126,7 +120,8 @@ class Gallery(commands.Cog):
         self.logger.debug(f"Added artist {member.id} in guild {member.guild.id}")
         return artist
 
-    def add_art(self, member: discord.Member, url, description=""):
+    async def add_art(self, member: discord.Member, url, description=""):
+        await asyncio.wait_for(self.no_cleanup(), timeout=None)
         if self.bot.s.query(BlackList).get((member.id, member.guild.id)):
             return
         if not (artist := self.get_artist(member)):
@@ -159,17 +154,6 @@ class Gallery(commands.Cog):
     @art.command()
     async def add(self, interaction, link: str, description: str):
         """Adds link to user gallery"""
-
-        try:
-            async with self.bot.session.head(link) as r:
-                if r.status == 400:
-                    valid = True
-        except aiohttp.InvalidURL:
-            valid = False
-        if not valid:
-            return await interaction.response.send_message(
-                "The link provided is invalid!", ephemeral=True
-            )
         if (
             not link.lower().endswith((".gif", ".png", ".jpeg", "jpg"))
             and description == ""
@@ -178,7 +162,7 @@ class Gallery(commands.Cog):
                 "Add a description for non image entries!", ephemeral=True
             )
         else:
-            id = self.add_art(interaction.user, link, description)
+            id = await self.add_art(interaction.user, link, description)
             await interaction.response.send_message(f"Added art with id {id}!")
 
     @app_commands.describe(art_id="ID of the art to delete")
@@ -236,9 +220,12 @@ class Gallery(commands.Cog):
         async def head(url: str, s: aiohttp.ClientSession):
             try:
                 async with s.head(url) as r:
-                    return r.status == 400
+                    return r.status != 400
             except aiohttp.InvalidURL:
                 return False
+            except Exception as e:
+                self.logger.error(f"Unknown exception in clean up: {type(e)}:{e}")
+                return True
 
         for art in arts:
             task = asyncio.ensure_future(head(art.link, self.bot.session))
