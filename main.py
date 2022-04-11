@@ -1,3 +1,4 @@
+import aiohttp
 import discord
 import logging
 import json
@@ -22,9 +23,13 @@ class Mayushii(commands.Bot):
         super().__init__(command_prefix, **options)
         self.logger = self.get_logger(self.__class__)
         self.logger.info("Loading config.json")
+        self.session = None
         with open("data/config.json") as config:
             self.config = json.load(config)
         self.owner_id = self.config["owner"]
+
+    async def setup_hook(self) -> None:
+        self.session = aiohttp.ClientSession()
 
     @staticmethod
     def get_logger(self):
@@ -150,6 +155,7 @@ class Mayutree(app_commands.CommandTree):
             (
                 exceptions.TooNew,
                 exceptions.NoOnGoingPoll,
+                exceptions.BotOwnerOnly,
                 exceptions.NoOnGoingRaffle,
                 exceptions.BlackListed,
                 exceptions.NoArtChannel,

@@ -159,12 +159,23 @@ class Gallery(commands.Cog):
     @art.command()
     async def add(self, interaction, link: str, description: str):
         """Adds link to user gallery"""
+
+        try:
+            async with self.bot.session.head(link) as r:
+                if r.status == 400:
+                    valid = True
+        except aiohttp.InvalidURL:
+            valid = False
+        if not valid:
+            return await interaction.response.send_message(
+                "The link provided is invalid!", ephemeral=True
+            )
         if (
             not link.lower().endswith((".gif", ".png", ".jpeg", "jpg"))
             and description == ""
         ):
             await interaction.response.send_message(
-                "Add a description for non image entries!"
+                "Add a description for non image entries!", ephemeral=True
             )
         else:
             id = self.add_art(interaction.user, link, description)
@@ -213,7 +224,7 @@ class Gallery(commands.Cog):
             "Starting gallery cleanup (This might take a while)!"
         )
         await self.bot.change_presence(status=discord.Status.dnd)
-        arts = (
+        arts: list[Art] = (
             self.bot.s.query(Art)
             .join(Art.artist)
             .filter(Artist.guild == interaction.guild.id)
@@ -222,19 +233,21 @@ class Gallery(commands.Cog):
         )
         tasks = []
 
-        async def head(url, s):
-            async with s.head(url) as r:
-                return r
+        async def head(url: str, s: aiohttp.ClientSession):
+            try:
+                async with s.head(url) as r:
+                    return r.status == 400
+            except aiohttp.InvalidURL:
+                return False
 
-        async with aiohttp.ClientSession() as session:
-            for art in arts:
-                task = asyncio.ensure_future(head(art.link, session))
-                tasks.append(task)
-            responses = await asyncio.gather(*tasks)
+        for art in arts:
+            task = asyncio.ensure_future(head(art.link, self.bot.session))
+            tasks.append(task)
+        responses = await asyncio.gather(*tasks)
 
-        for resp in responses:
-            if resp.status == 403:
-                todelete.append(art)
+        for n, ok in enumerate(responses):
+            if not ok:
+                todelete.append(arts[n])
 
         if todelete:
             for art in todelete:

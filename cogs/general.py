@@ -12,7 +12,7 @@ from utils.exceptions import BotOwnerOnly
 
 def bot_owner_only(interaction):
     if interaction.user.id != interaction.client.owner_id:
-        raise BotOwnerOnly()
+        raise BotOwnerOnly("Only the bot owner can use this command.")
     return True
 
 
