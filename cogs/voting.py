@@ -1,7 +1,6 @@
 import discord
 import datetime
 
-
 from discord.ext import commands, tasks
 from discord import app_commands
 from utils.database import Poll, Guild
@@ -246,9 +245,6 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
             msg += f"{x}: {result[x]}   "
         embed.add_field(name="Votes", value=msg, inline=False)
         await interaction.response.send_message(embed=embed)
-
-    async def cog_command_error(self, ctx, exc):
-        self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
 
 
 async def setup(bot):

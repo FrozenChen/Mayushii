@@ -291,9 +291,6 @@ class Gallery(commands.Cog):
         self.bot.s.commit()
         await interaction.response.send_message("Artist deleted")
 
-    async def cog_command_error(self, ctx, exc):
-        self.logger.debug(f"{ctx.command}: {exc}")
-
 
 async def setup(bot):
     await bot.add_cog(Gallery(bot))

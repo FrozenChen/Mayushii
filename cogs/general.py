@@ -164,9 +164,6 @@ class General(commands.Cog):
             f"Removed {member.mention} from blacklist!"
         )
 
-    async def cog_command_error(self, ctx, exc):
-        self.logger.debug(f"{ctx.command}: {type(exc).__name__}: {exc}")
-
 
 async def setup(bot: Mayushii):
     await bot.add_cog(General(bot))

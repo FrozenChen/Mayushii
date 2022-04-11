@@ -70,7 +70,7 @@ class VoteManager:
 
     def ongoing_poll(self, guild_id) -> Literal[True]:
         if self.get_ongoing_poll(guild_id) is None:
-            raise NoOnGoingPoll(f"There is no ongoing poll")
+            raise NoOnGoingPoll("There is no ongoing poll")
         return True
 
     def get_poll(self, poll_id: int, guild_id):
@@ -113,7 +113,7 @@ class VoteManager:
         else:
             old_vote = voter.option
             if voter.option == option:
-                await interaction.response.send_message(f"No change in vote!")
+                await interaction.response.send_message("No change in your vote!")
             else:
                 voter.option = option
                 await interaction.response.send_message(

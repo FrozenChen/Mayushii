@@ -87,7 +87,7 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
                 "I can't remove the role.", ephemeral=True
             )
         await interaction.response.send_message(
-            f"The role has been removed!", ephemeral=True
+            "The role has been removed!", ephemeral=True
         )
 
     @app_commands.checks.has_permissions(manage_channels=True)
