@@ -6,7 +6,6 @@ from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from sqlalchemy.orm import contains_eager
 from utils.database import Art, Artist, BlackList, Guild
-from utils.exceptions import DisabledCog, NoArtChannel
 
 
 class GalleryView(discord.ui.View):
@@ -81,7 +80,7 @@ class Gallery(commands.Cog):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
         self.cleanup = False
-        self.art_channel = {
+        self.bot.art_channels = {
             guild.id: guild.art_channel for guild in self.bot.s.query(Guild).all()
         }
 
@@ -94,12 +93,16 @@ class Gallery(commands.Cog):
             pass
 
     @commands.Cog.listener()
-    async def on_message(self, message):
-        if isinstance(
-            message.channel, discord.abc.PrivateChannel
-        ) or not self.is_enabled(message.guild):
+    async def on_message(self, message: discord.Message):
+        if (
+            isinstance(message.channel, discord.abc.PrivateChannel)
+            or message.author == message.guild.me
+        ):
             return
-        if message.channel.id == self.art_channel.get(message.guild.id):
+        art_channel_id = self.bot.art_channels.get(message.guild.id)
+        if not self.is_enabled(message.guild) or art_channel_id is None:
+            return
+        if message.channel.id == art_channel_id:
             count = 0
             added = []
             for attachment in message.attachments:
@@ -154,6 +157,10 @@ class Gallery(commands.Cog):
     @art.command()
     async def add(self, interaction, link: str, description: str):
         """Adds link to user gallery"""
+        if interaction.channel.id != self.bot.art_channels.get(interaction.guild_id):
+            return await interaction.response.send_message(
+                "This command can only be used in the art channel."
+            )
         if (
             not link.lower().endswith((".gif", ".png", ".jpeg", "jpg"))
             and description == ""
@@ -255,7 +262,7 @@ class Gallery(commands.Cog):
         """Sets a Text channel as the art channel"""
         dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
         dbguild.art_channel = channel.id
-        self.art_channel[interaction.guild.id] = channel.id
+        self.bot.art_channel[interaction.guild.id] = channel.id
         self.bot.s.commit()
         await interaction.response.send_message(f"Set art channel to {channel.mention}")
 
