@@ -90,6 +90,23 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
             "The role has been removed!", ephemeral=True
         )
 
+    @staticmethod
+    def can_be_community_role(role: discord.Role):
+        permissions = role.permissions
+        return not (
+            permissions.administrator
+            or permissions.ban_members
+            or permissions.kick_members
+            or permissions.manage_channels
+            or permissions.manage_guild
+            or permissions.manage_messages
+            or permissions.manage_roles
+            or permissions.manage_webhooks
+            or permissions.view_audit_log
+            or permissions.mention_everyone
+            or permissions.manage_nicknames
+        )
+
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.describe(
         alias="Alias for the new community role",
@@ -113,6 +130,10 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
         elif self.bot.s.query(CommunityRole).get((role.id, interaction.guild.id)):
             return await interaction.response.send_message(
                 "This role is a community role already."
+            )
+        elif not self.can_be_community_role(role):
+            return await interaction.response.send_message(
+                "Roles with moderation permissions can't be community roles."
             )
         self.bot.s.add(
             CommunityRole(
