@@ -1,10 +1,11 @@
 import discord
+import random
 import utils
 
 from datetime import datetime
 from typing import Optional, Literal
 from main import Mayushii
-from utils.database import Poll, Voter, Giveaway
+from utils.database import Poll, Voter, Giveaway, GiveawayEntry, GiveawayRole
 from utils.exceptions import NoOnGoingPoll
 
 
@@ -81,7 +82,7 @@ class VoteManager:
         )
 
     async def end_poll(self, poll: Poll, view):
-        await view.stop_vote()
+        await view.stop()
         result = self.count_votes(poll)
         embed = discord.Embed(
             title=f"The {poll.name} has ended!",
@@ -134,9 +135,126 @@ class RaffleManager:
     def __init__(self, bot: Mayushii):
         self.bot = bot
         self.raffles: dict[int, Giveaway] = {
-            raffle.guild: raffle
+            raffle.guild_id: raffle
             for raffle in self.bot.s.query(Giveaway).filter_by(ongoing=True).all()
         }
 
-    def get_raffle(self, interaction):
-        return self.raffles.get(interaction.guild.id)
+    def create_raffle(
+        self,
+        name: str,
+        description: str,
+        url: Optional[str],
+        win_count: int,
+        max_participants: Optional[int],
+        roles: list[discord.Role],
+        guild_id: int,
+        channel_id: int,
+        message_id: int,
+        author_id: int,
+        custom_id: int,
+        start_date: datetime,
+        end_date: Optional[datetime],
+    ):
+        raffle = Giveaway(
+            name=name,
+            description=description,
+            url=url,
+            win_count=win_count,
+            max_participants=max_participants,
+            ongoing=True,
+            author_id=author_id,
+            custom_id=custom_id,
+            guild_id=guild_id,
+            channel_id=channel_id,
+            message_id=message_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        self.bot.s.add(raffle)
+
+        if roles:
+            self.bot.s.add_all(
+                [GiveawayRole(id=role.id, giveaway_id=raffle.id) for role in roles]
+            )
+        self.bot.s.commit()
+        return raffle
+
+    def get_raffle(self, guild_id: int) -> Optional[Giveaway]:
+        return self.raffles.get(guild_id)
+
+    def get_winners(self, guild_id: int) -> list[discord.Member]:
+        raffle = self.raffles[guild_id]
+        guild = self.bot.get_guild(guild_id)
+        winners = []
+
+        if len(raffle.entries) >= raffle.win_count:
+            while len(winners) != raffle.win_count:
+                entry: GiveawayEntry = random.choice(raffle.entries)
+                if (winner := guild.get_member(entry.user_id)) is not None:
+                    entry.winner = True
+                    winners.append(winner)
+                else:
+                    self.bot.s.delete(entry)
+        return winners
+
+    async def process_entry(self, interaction: discord.Interaction):
+        raffle = self.get_raffle(interaction.guild_id)
+        if not raffle.ongoing:
+            return await interaction.response.send_message(
+                "The raffle has ended", ephemeral=True
+            )
+        if raffle.roles:
+            for role in raffle.roles:
+                if not any(discord.utils.get(interaction.user.roles, id=role.id)):
+                    return await interaction.response.send_message(
+                        "You are not allowed to participate!", ephemeral=True
+                    )
+        user_id = interaction.user.id
+        entry = self.bot.s.query(GiveawayEntry).get((user_id, raffle.id))
+        if entry:
+            return await interaction.response.send_message(
+                "You are already participating!", ephemeral=True
+            )
+        self.bot.s.add(GiveawayEntry(user_id=user_id, giveaway_id=raffle.id))
+        self.bot.s.commit()
+
+        await interaction.response.send_message(
+            f"{interaction.user.mention} now you are participating in the raffle!",
+            ephemeral=True,
+        )
+        if len(raffle.entries) >= raffle.max_participants:
+            await self.stop_raffle(interaction.guild_id)
+
+    def get_view(self, guild_id: int):
+        raffle = self.get_raffle(guild_id)
+        return discord.utils.get(self.bot.persistent_views, custom_id=raffle.custom_id)
+
+    async def stop_raffle(self, guild_id: int):
+        view = self.get_view(guild_id)
+        raffle = self.raffles[guild_id]
+        raffle.ongoing = False
+        self.bot.s.commit()
+        await view.stop()
+        result = self.get_winners(guild_id)
+        embed = discord.Embed(
+            title=f"The {raffle.name} raffle has ended!",
+            description="Congratulation to the winner(s)!",
+        )
+        msg = ""
+        for winner in result:
+            msg += f"{winner.mention} "
+        embed.add_field(name="Winners", value=msg, inline=False)
+
+        if guild := self.bot.get_guild(view.guild_id):
+            channel = guild.get_channel(view.channel_id)
+            if channel:
+                await channel.send(embed=embed)
+        del self.raffles[guild_id]
+
+    @staticmethod
+    def create_embed(raffle: Giveaway, description="") -> discord.Embed:
+        return discord.Embed(
+            title=raffle.name,
+            description=description,
+            colour=utils.utilities.gen_color(raffle.id),
+        )

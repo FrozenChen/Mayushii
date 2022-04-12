@@ -64,10 +64,12 @@ class Poll(Base):
     url = Column(String)
 
     custom_id = Column(Integer)
-    guild_id = Column(Integer, ForeignKey("guilds.id"))
-    message_id = Column(Integer)
     author_id = Column(Integer)
+
+    # Needed to fetch the view message, ugh
+    guild_id = Column(Integer, ForeignKey("guilds.id"))
     channel_id = Column(Integer)
+    message_id = Column(Integer)
 
     active = Column(Boolean, default=False)
     start = Column(TIMESTAMP)
@@ -99,17 +101,33 @@ class Voter(Base):
 
 class Giveaway(Base):
     __tablename__ = "giveaway"
+
     id = Column(Integer, primary_key=True)
-    guild = Column(Integer, ForeignKey("guilds.id"))
     name = Column(String)
+    description = Column(String)
+    url = Column(String)
+
+    author_id = Column(Integer)
+    custom_id = Column(Integer)
+
+    # Needed to fetch the view message, ugh
+    guild_id = Column(Integer, ForeignKey("guilds.id"))
+    channel_id = Column(Integer)
+    message_id = Column(Integer)
+
+    ongoing = Column(Boolean, default=False)
+    start_date = Column(TIMESTAMP)
+    end_date = Column(TIMESTAMP)
+    max_participants = Column(Integer)
     win_count = Column(Integer)
-    ongoing = Column(Boolean, default=True)
+
     entries = relationship(
-        "Entry", back_populates="giveaway_ref", cascade="all, delete, delete-orphan"
+        "GiveawayEntry", back_populates="giveaway", cascade="all, delete, delete-orphan"
     )
+
     roles = relationship(
         "GiveawayRole",
-        back_populates="giveaway_ref",
+        back_populates="giveaway",
         cascade="all, delete, delete-orphan",
     )
 
@@ -118,24 +136,27 @@ class Giveaway(Base):
 
 
 class GiveawayRole(Base):
-    __tablename__ = "giveaway_roles"
+    __tablename__ = "giveawayroles"
     id = Column(Integer, primary_key=True)
-    giveaway = Column(Integer, ForeignKey("giveaway.id"), primary_key=True)
-    giveaway_ref = relationship("Giveaway", back_populates="roles")
+    giveaway_id = Column(Integer, ForeignKey("giveaway.id"), primary_key=True)
+
+    giveaway = relationship("Giveaway", back_populates="roles")
 
     def __repr__(self):
-        return f"<GiveawayRole id={self.id}, giveaway={self.giveaway}>"
+        return f"<GiveawayRole id={self.id}, giveaway={self.giveaway_id}>"
 
 
-class Entry(Base):
+class GiveawayEntry(Base):
     __tablename__ = "entries"
-    id = Column(Integer, primary_key=True)
-    giveaway = Column(Integer, ForeignKey("giveaway.id"), primary_key=True)
+    user_id = Column(Integer, primary_key=True)
+    giveaway_id = Column(Integer, ForeignKey("giveaway.id"), primary_key=True)
+
     winner = Column(Boolean, default=False)
-    giveaway_ref = relationship("Giveaway", back_populates="entries")
+
+    giveaway = relationship("Giveaway", back_populates="entries")
 
     def __repr__(self):
-        return f"<GiveawayEntry id={self.id}, giveaway={self.giveaway}, winner={self.winner}>"
+        return f"<GiveawayEntry giveaway={self.giveaway_id}, winner={self.winner}>"
 
 
 class CommunityRole(Base):

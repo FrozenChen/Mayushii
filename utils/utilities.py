@@ -91,3 +91,22 @@ class DateTransformer(app_commands.Transformer):
             raise app_commands.TransformerError(
                 "Invalid date format", discord.AppCommandOptionType.string, cls
             )
+
+
+class GreedyRoleTransformer(app_commands.Transformer):
+    @classmethod
+    async def transform(
+        cls, interaction: discord.Interaction, value: str
+    ) -> list[discord.Role]:
+        data = value.split(",")
+        roles = []
+        for role_id in data:
+            try:
+                role = interaction.guild.get_role(int(role_id))
+                if role:
+                    roles.append(role)
+            except (discord.NotFound, ValueError):
+                raise app_commands.TransformerError(
+                    "Invalid date format", discord.AppCommandOptionType.role, cls
+                )
+        return roles

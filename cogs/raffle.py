@@ -1,15 +1,19 @@
 import asyncio
+import datetime
 import discord
-import random
 
 from discord import app_commands
-from discord.ext import commands
-from utils.checks import not_new, not_blacklisted
-from utils.database import Giveaway, Entry, GiveawayRole, Guild
+from discord.ext import commands, tasks
+from utils.database import GiveawayRole, Guild
 from utils.managers import RaffleManager
 from utils.exceptions import NoOnGoingRaffle
-from utils.utilities import ConfirmationButtons
-from typing import List
+from utils.utilities import (
+    ConfirmationButtons,
+    DateTransformer,
+    TimeTransformer,
+    GreedyRoleTransformer,
+)
+from utils.views import RaffleView, LinkButton
 
 
 class Raffle(commands.Cog, app_commands.Group):
@@ -22,6 +26,28 @@ class Raffle(commands.Cog, app_commands.Group):
         self.bot.raffle_manager = RaffleManager(bot)
         self.queue = asyncio.Queue()
 
+    async def cog_load(self):
+        for guild_id, raffle in self.bot.raffle_manager.raffles.items():
+            view = RaffleView(
+                custom_id=raffle.custom_id,
+                guild_id=raffle.guild_id,
+                message_id=raffle.message_id,
+                raffle_manager=self.bot.raffle_manager,
+                channel_id=raffle.channel_id,
+            )
+            self.bot.add_view(view)
+        self.check_views.start()
+
+    @tasks.loop(seconds=60.0)
+    async def check_views(self):
+        now = datetime.datetime.utcnow()
+        for raffle in self.bot.raffle_manager.raffles.values():
+            if raffle.end_date and raffle.end_date < now:
+                view = discord.utils.get(
+                    self.bot.persistent_views, custom_id=raffle.custom_id
+                )
+                await self.bot.raffle_manager.end_raffle(raffle, view)
+
     @staticmethod
     def is_enabled(interaction):
         dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
@@ -29,109 +55,115 @@ class Raffle(commands.Cog, app_commands.Group):
 
     # checks
     def ongoing_raffle(interaction):
-        raffle = interaction.client.raffle_manager.get_raffle(interaction)
+        raffle = interaction.client.raffle_manager.get_raffle(interaction.guild_id)
         if raffle and raffle.ongoing:
             return True
         raise NoOnGoingRaffle("There is no ongoing raffle.")
-
-    async def queue_empty(self):
-        while not self.queue.empty():
-            pass
-
-    async def process_entry(self):
-        interaction = await self.queue.get()
-        raffle = self.bot.raffle_manager.get_raffle(interaction)
-        if raffle.roles:
-            for role in raffle.roles:
-                if not any(discord.utils.get(interaction.author.roles, id=role.id)):
-                    return await interaction.send(
-                        "You are not allowed to participate!", ephemeral=True
-                    )
-        user_id = interaction.author.id
-        entry = self.bot.s.query(Entry).get((user_id, raffle.id))
-        if entry:
-            return await interaction.send(
-                "You are already participating!", ephemeral=True
-            )
-        self.bot.s.add(Entry(id=user_id, giveaway=raffle.id))
-        self.bot.s.commit()
-        await interaction.send(
-            f"{interaction.author.mention} now you are participating in the raffle!",
-            ephemeral=True,
-        )
-        self.queue.task_done()
-
-    def create_raffle(self, name: str, winners: int, guild: int, roles: List[int]):
-        raffle = Giveaway(name=name, win_count=winners, guild=guild)
-        self.bot.s.add(raffle)
-        self.bot.s.commit()
-        if roles:
-            self.bot.s.add_all(
-                [GiveawayRole(id=role_id, giveaway=raffle.id) for role_id in roles]
-            )
-            self.bot.s.commit()
-        return raffle
-
-    def get_winner(self, interaction):
-        raffle = interaction.application_command.cog.raffles[interaction.guild.id]
-        while len(raffle.entries) >= 1:
-            entry = random.choice(raffle.entries)
-            if (winner := interaction.guild.get_member(entry.id)) is not None:
-                entry.winner = True
-                self.bot.s.commit()
-                return winner
-            self.bot.s.delete(entry)
-        return None
-
-    @app_commands.check(not_blacklisted)
-    @app_commands.check(not_new)
-    @app_commands.check(ongoing_raffle)
-    @app_commands.command()
-    async def join(self, interaction):
-        """Joins the ongoing raffle if there is one"""
-        await self.queue.put(interaction)
-        await self.process_entry()
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.describe(
         name="Name of the new raffle",
         winners="Number of winners",
-        allowed_role="Roles allowed to participate",
+        allowed_roles="Roles allowed to participate",
     )
     @app_commands.command()
     async def create(
         self,
-        interaction,
+        interaction: discord.Interaction,
         name: str,
+        description: str,
+        target_channel: discord.TextChannel,
+        url: str = None,
         winners: int = 1,
-        allowed_role: discord.Role = None,
+        max_participants: int = None,
+        end_date: app_commands.Transform[datetime.datetime, DateTransformer] = None,
+        lasts: app_commands.Transform[int, TimeTransformer] = None,
+        allowed_roles: app_commands.Transform[
+            list[discord.Role], GreedyRoleTransformer
+        ] = None,
     ):
         """Creates a giveaway"""
-        if self.bot.raffle_manager.get_raffle(interaction):
-            return await interaction.send("There is an already ongoing giveaway!")
+        if self.bot.raffle_manager.get_raffle(interaction.guild.id):
+            return await interaction.response.send_message(
+                "There is an already ongoing giveaway!"
+            )
+
+        if lasts and end_date:
+            return await interaction.response.send_message(
+                "end_date and lasts parameters are mutually exclusive"
+            )
+        if lasts and lasts < 600:
+            return await interaction.response.send_message(
+                "A poll has to last longer than 10 minutes"
+            )
+
         embed = discord.Embed(title="Proposed Giveaway", color=discord.Color.purple())
         embed.add_field(name="Name", value=name, inline=False)
+        embed.add_field(name="Description", value=description, inline=False)
         embed.add_field(name="Number of winners", value=str(winners), inline=False)
-        if allowed_role:
+        if allowed_roles:
             embed.add_field(
                 name="Roles accepted",
-                value=allowed_role.name,
+                value=" ".join(role.name for role in allowed_roles),
                 inline=False,
             )
         view = ConfirmationButtons()
-        await interaction.send("Is this giveaway correct?", embed=embed, view=view)
+        await interaction.response.send_message(
+            "Is this giveaway correct?", embed=embed, view=view
+        )
+        await view.wait()
         if view.value:
-            self.bot.raffle_manager[interaction.guild.id] = self.create_raffle(
-                name=name,
-                winners=winners,
-                roles=[allowed_role.name] if allowed_role else [],
-                guild=interaction.guild.id,
+            start = datetime.datetime.utcnow()
+            if lasts or end_date:
+                if lasts:
+                    diff = datetime.timedelta(seconds=lasts)
+                    end_date = start + diff
+                if end_date < start or (end_date - start).total_seconds() < 600:
+                    return await interaction.edit_original_message(
+                        content="A raffle has to last longer than 10 minutes",
+                        view=None,
+                        embed=None,
+                    )
+            raffle_view = RaffleView(
+                custom_id=interaction.id,
+                guild_id=interaction.guild_id,
+                channel_id=interaction.channel.id,
+                raffle_manager=self.bot.raffle_manager,
             )
-            await interaction.send(
-                f"Started giveaway {name} with {winners} possible winners! Use `/raffle join`to join"
+            if url:
+                raffle_view.add_item(LinkButton(label="link", url=url))
+            msg = await target_channel.send("Loading", view=raffle_view)
+
+            raffle_view.message_id = msg.id
+            raffle = self.bot.raffle_manager.create_raffle(
+                name=name,
+                description=description,
+                url=url,
+                win_count=winners,
+                max_participants=max_participants,
+                roles=allowed_roles,
+                guild_id=interaction.guild_id,
+                channel_id=target_channel.id,
+                message_id=msg.id,
+                author_id=interaction.user.id,
+                custom_id=interaction.id,
+                start_date=start,
+                end_date=end_date,
+            )
+            self.bot.raffle_manager.raffles[interaction.guild.id] = raffle
+            await msg.edit(
+                content="",
+                embed=self.bot.raffle_manager.create_embed(
+                    raffle, "Joint the raffle for X now, clock the join button to join"
+                ),
+            )
+            await interaction.edit_original_message(
+                content=f"Started giveaway {name} with {winners} possible winners! Use `/raffle join`to join",
+                embed=None,
+                view=None,
             )
         else:
-            await interaction.send("Alright then.")
+            await interaction.edit_original_message(content="Alright then.")
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.check(ongoing_raffle)
@@ -139,7 +171,7 @@ class Raffle(commands.Cog, app_commands.Group):
     @app_commands.command()
     async def info(self, interaction):
         """Shows information about current giveaway"""
-        raffle = self.bot.raffle_manager[interaction.guild.id]
+        raffle = self.bot.raffle_manager.raffles[interaction.guild.id]
         embed = discord.Embed()
         embed.add_field(name="ID", value=raffle.id, inline=False)
         embed.add_field(name="Name", value=raffle.name, inline=False)
@@ -152,61 +184,37 @@ class Raffle(commands.Cog, app_commands.Group):
         embed.add_field(
             name="Number of entries", value=str(len(raffle.entries)), inline=False
         )
-        await interaction.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.check(ongoing_raffle)
     @app_commands.command()
-    async def cancel(self, interaction):
+    async def cancel(self, interaction: discord.Interaction):
         """Cancels current giveaway"""
         view = ConfirmationButtons()
-        await interaction.send(
+        await interaction.response.send_message(
             "Are you sure you want to cancel current giveaway?", view=view
         )
         if view.value:
             self.bot.raffle_manager.raffles[interaction.guild.id].ongoing = False
-            self.bot.raffle_manager.raffles[interaction.guild.id] = None
+            del self.bot.raffle_manager.raffles[interaction.guild.id]
+            await self.bot.raffle_manager.views[interaction.guild.id].stop()
+            del self.bot.raffle_manager.views[interaction.guild.id]
             self.bot.s.commit()
-            return await interaction.send("Giveaway cancelled.")
-        await interaction.send("And the raffle continues.")
+            return await interaction.edit_original_message(
+                content="Giveaway cancelled.", view=None
+            )
+        await interaction.edit_original_message(
+            content="And the raffle continues.", view=None
+        )
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.check(ongoing_raffle)
     @app_commands.command()
-    async def finish(self, interaction):
+    async def finish(self, interaction: discord.Interaction):
         """Finishes the current raffle"""
-        raffle = self.bot.raffle_manager.raffles[interaction.guild.id]
-        raffle.ongoing = False
-        self.bot.s.commit()
-        await asyncio.wait_for(self.queue_empty(), timeout=None)
-        winners = []
-        for i in range(0, raffle.win_count):
-            winners.append(self.get_winner(interaction))
-        winners = list(filter(lambda a: a is not None, winners))
-        if len(winners) < raffle.win_count:
-            await interaction.send("Not enough participants for giveaway!")
-            if not winners:
-                await interaction.send("No users to choose...")
-                raffle.ongoing = True
-                return
-        await interaction.send("And the winner is....!!")
-        async with interaction.channel.typing():
-            await asyncio.sleep(5)
-            for user in winners:
-                await interaction.send(f"{user.mention}")
-            await interaction.send("Congratulations")
-        for user in winners:
-            try:
-                await user.send(f"You're the {raffle.name} raffle winner!!")
-            except (discord.HTTPException, discord.Forbidden):
-                await interaction.send(
-                    f"Failed to send message to winner {user.mention}!"
-                )
-        self.bot.s.commit()
-        await interaction.send(
-            f"Giveaway finished with {len(raffle.entries)} participants."
-        )
-        self.bot.raffle_manager.raffles[interaction.guild.id] = None
+        await self.bot.raffle_manager.stop_raffle(interaction.guild_id)
+        await interaction.response.send_message("Raffle finished!")
 
     modify = app_commands.Group(
         name="modify", description="Commands to modify a raffle"
@@ -219,21 +227,25 @@ class Raffle(commands.Cog, app_commands.Group):
         """Modify number of winners for the ongoing raffle"""
         self.bot.raffle_manager.raffles[interaction.guild.id].win_count = new_value
         self.bot.s.commit()
-        await interaction.sendd(f"Updated number of winners to {new_value}")
+        await interaction.response.send_message(
+            f"Updated number of winners to {new_value}"
+        )
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.describe(new_role="Role to allow in the raffle")
     @modify.command()
     async def add_allowed_role(
         self,
-        interaction,
+        interaction: discord.Interaction,
         new_role: discord.Role,
     ):
         """Add a role to raffle"""
-        raffle = self.bot.raffle_manager.get_raffle(interaction)
+        raffle = self.bot.raffle_manager.get_raffle(interaction.guild_id)
         self.bot.s.add(GiveawayRole(id=new_role.id, giveaway=raffle.id))
         self.bot.s.commit()
-        await interaction.sendd(f"Added role {new_role.name} to the raffle")
+        await interaction.response.send_message(
+            f"Added role {new_role.name} to the raffle"
+        )
 
 
 async def setup(bot):
