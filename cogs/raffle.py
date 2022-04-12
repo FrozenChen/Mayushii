@@ -85,16 +85,16 @@ class Raffle(commands.Cog, app_commands.Group):
         """Creates a giveaway"""
         if self.bot.raffle_manager.get_raffle(interaction.guild.id):
             return await interaction.response.send_message(
-                "There is an already ongoing giveaway!"
+                "There is an already ongoing giveaway!", ephemeral=True
             )
 
         if lasts and end_date:
             return await interaction.response.send_message(
-                "end_date and lasts parameters are mutually exclusive"
+                "end_date and lasts parameters are mutually exclusive", ephemeral=True
             )
         if lasts and lasts < 600:
             return await interaction.response.send_message(
-                "A poll has to last longer than 10 minutes"
+                "A poll has to last longer than 10 minutes", ephemeral=True
             )
 
         embed = discord.Embed(title="Proposed Giveaway", color=discord.Color.purple())
@@ -109,7 +109,7 @@ class Raffle(commands.Cog, app_commands.Group):
             )
         view = ConfirmationButtons()
         await interaction.response.send_message(
-            "Is this giveaway correct?", embed=embed, view=view
+            "Is this giveaway correct?", embed=embed, view=view, ephemeral=True
         )
         await view.wait()
         if view.value:
@@ -154,7 +154,7 @@ class Raffle(commands.Cog, app_commands.Group):
             await msg.edit(
                 content="",
                 embed=self.bot.raffle_manager.create_embed(
-                    raffle, "Joint the raffle for X now, clock the join button to join"
+                    raffle, description=description
                 ),
             )
             await interaction.edit_original_message(
