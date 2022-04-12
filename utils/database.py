@@ -147,7 +147,7 @@ class GiveawayRole(Base):
 
 
 class GiveawayEntry(Base):
-    __tablename__ = "entries"
+    __tablename__ = "giveawayentries"
     user_id = Column(Integer, primary_key=True)
     giveaway_id = Column(Integer, ForeignKey("giveaway.id"), primary_key=True)
 
