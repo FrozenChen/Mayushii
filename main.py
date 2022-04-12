@@ -2,11 +2,12 @@ import aiohttp
 import discord
 import logging
 import json
+import sqlalchemy.orm
 
 from discord import app_commands
 from discord.app_commands import ContextMenu, Command
 from discord.ext import commands
-from typing import Union
+from typing import Union, Optional
 from traceback import format_exception
 from utils import exceptions
 from sqlalchemy import create_engine
@@ -23,7 +24,8 @@ class Mayushii(commands.Bot):
         super().__init__(command_prefix, **options)
         self.logger = self.get_logger(self.__class__)
         self.logger.info("Loading config.json")
-        self.session = None
+        self.session: Optional[aiohttp.ClientSession] = None
+        self.s: Optional[sqlalchemy.orm.Session] = None
         with open("data/config.json") as config:
             self.config = json.load(config)
         self.owner_id = self.config["owner"]
@@ -52,7 +54,7 @@ class Mayushii(commands.Bot):
     async def on_ready(self):
         engine = create_engine("sqlite:///data/mayushii.db")
         session = sessionmaker(bind=engine)
-        self.s = session()
+        self.s: sqlalchemy.orm.session = session()
         Base.metadata.create_all(engine)
         for guild in self.guilds:
             if not self.s.query(Guild).get(guild.id):
@@ -133,6 +135,11 @@ class Mayushii(commands.Bot):
             logger.debug(exc)
             if error_channel:
                 await error_channel.send(exc)
+
+    async def close(self) -> None:
+        await self.session.close()
+        self.s.close()
+        await super().close()
 
 
 class Mayutree(app_commands.CommandTree):
