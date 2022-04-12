@@ -91,7 +91,7 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
         )
 
     @staticmethod
-    def can_be_community_role(role: discord.Role):
+    def can_be_community_role(role: discord.Role, top_role_pos: int):
         permissions = role.permissions
         return not (
             permissions.administrator
@@ -105,6 +105,7 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
             or permissions.view_audit_log
             or permissions.mention_everyone
             or permissions.manage_nicknames
+            or role.position >= top_role_pos
         )
 
     @app_commands.checks.has_permissions(manage_channels=True)
@@ -115,9 +116,14 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
     )
     @app_commands.command()
     async def create(
-        self, interaction, alias: str, role: discord.Role, description: str
+        self,
+        interaction: discord.Interaction,
+        alias: str,
+        role: discord.Role,
+        description: str,
     ):
         """Makes a server role as a community role"""
+        top_role = interaction.guild.me.top_role
         if (
             self.bot.s.query(CommunityRole)
             .filter(
@@ -131,9 +137,9 @@ class Community(commands.Cog, app_commands.Group, name="communityrole"):
             return await interaction.response.send_message(
                 "This role is a community role already."
             )
-        elif not self.can_be_community_role(role):
+        elif not self.can_be_community_role(role, top_role.position):
             return await interaction.response.send_message(
-                "Roles with moderation permissions can't be community roles."
+                "Roles with moderation permissions or higher than the bot highest role can't be community roles."
             )
         self.bot.s.add(
             CommunityRole(
