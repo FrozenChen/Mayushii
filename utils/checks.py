@@ -18,5 +18,5 @@ def not_blacklisted(interaction):
     if interaction.client.s.query(BlackList).get(
         (interaction.user.id, interaction.guild.id)
     ):
-        raise BlackListed("You are blacklisted and cant use this command")
+        raise BlackListed("You are blacklisted and can't use this command")
     return True

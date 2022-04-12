@@ -1,29 +1,29 @@
-from discord.ext import commands
+from discord.app_commands import CheckFailure
 
 
-class NoOnGoingPoll(commands.CheckFailure):
+class NoOnGoingPoll(CheckFailure):
     pass
 
 
-class NoOnGoingRaffle(commands.CheckFailure):
+class NoOnGoingRaffle(CheckFailure):
     pass
 
 
-class TooNew(commands.CheckFailure):
+class TooNew(CheckFailure):
     pass
 
 
-class BlackListed(commands.CheckFailure):
+class BlackListed(CheckFailure):
     pass
 
 
-class DisabledCog(commands.CheckFailure):
+class DisabledCog(CheckFailure):
     pass
 
 
-class BotOwnerOnly(commands.CheckFailure):
+class BotOwnerOnly(CheckFailure):
     pass
 
 
-class NoArtChannel(commands.CheckFailure):
+class NoArtChannel(CheckFailure):
     pass

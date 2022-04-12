@@ -163,6 +163,11 @@ class Mayutree(app_commands.CommandTree):
         ):
             await interaction.response.send_message(error, ephemeral=True)
 
+        elif isinstance(error, app_commands.CommandNotFound):
+            await interaction.response.send_message(
+                "Command not found.", ephemeral=True
+            )
+
         elif isinstance(error, app_commands.CheckFailure):
             await interaction.response.send_message(
                 f"You cannot use {command_name}.", ephemeral=True

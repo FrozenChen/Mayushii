@@ -5,6 +5,8 @@ import discord
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from sqlalchemy.orm import contains_eager
+
+from utils.checks import not_blacklisted
 from utils.database import Art, Artist, BlackList, Guild
 
 
@@ -107,7 +109,7 @@ class Gallery(commands.Cog):
             added = []
             for attachment in message.attachments:
                 if attachment.height and not message.content.startswith("."):
-                    art_id = self.add_art(
+                    art_id = await self.add_art(
                         message.author, attachment.url, message.content
                     )
                     added.append(art_id)
@@ -153,6 +155,7 @@ class Gallery(commands.Cog):
 
     art = app_commands.Group(name="art", description="Commands for managing art")
 
+    @app_commands.check(not_blacklisted)
     @app_commands.describe(link="Link to the art", description="Description of the art")
     @art.command()
     async def add(self, interaction, link: str, description: str):

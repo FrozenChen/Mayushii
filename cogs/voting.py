@@ -9,6 +9,11 @@ from utils.views import VoteView, LinkButton
 from utils.managers import VoteManager
 
 
+def is_enabled(interaction):
+    dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
+    return dbguild.flags & 0b1000
+
+
 class Voting(commands.Cog, app_commands.Group, name="poll"):
     """Commands for managing a poll."""
 
@@ -40,11 +45,6 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
                     self.bot.persistent_views, custom_id=poll.custom_id
                 )
                 await self.bot.poll_manager.end_poll(poll, view)
-
-    @staticmethod
-    def is_enabled(interaction):
-        dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
-        return dbguild.flags & 0b1000
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.command()

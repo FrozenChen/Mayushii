@@ -1,4 +1,3 @@
-import aiohttp
 import discord
 import subprocess
 
@@ -19,7 +18,7 @@ def bot_owner_only(interaction):
 class General(commands.Cog):
     """General commands for general use."""
 
-    def __init__(self, bot):
+    def __init__(self, bot: Mayushii):
         self.bot = bot
         self.logger = self.bot.get_logger(self)
         self.cogs = {
@@ -50,6 +49,7 @@ class General(commands.Cog):
         await self.bot.close()
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(cog="Cog to load")
     @group_bot.command()
     async def load(self, interaction, cog: str):
         """Load a cog"""
@@ -58,21 +58,49 @@ class General(commands.Cog):
             await interaction.response.send_message(f"Loaded `{cog}`!")
         except commands.ExtensionNotFound:
             await interaction.response.send_message(f"Extension {cog} not found")
+        except commands.ExtensionAlreadyLoaded:
+            await interaction.response.send_message(
+                f"Extension {cog} is already loaded"
+            )
         except commands.ExtensionFailed as exc:
             await interaction.response.send_message(
-                f"Failed to load cog!```\n{type(exc).__name__}: {exc}\n```"
+                f"Failed to load cog!```\n{type(exc).__name__}: {exc}\n```",
+                ephemeral=True,
             )
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(cog="Cog to reload")
+    @group_bot.command()
+    async def reload(self, interaction, cog: str):
+        """Reloads a cog"""
+        try:
+            await self.bot.reload_extension(f"cogs.{cog}")
+        except commands.ExtensionNotFound:
+            await interaction.response.send_message(f"Extension {cog} not found")
+        except commands.ExtensionNotLoaded:
+            await interaction.response.send_message(f"Extension {cog} is not loaded")
+        except commands.ExtensionFailed as exc:
+            await interaction.response.send_message(
+                f"Failed to reload cog!```\n{type(exc).__name__}: {exc}\n```",
+                ephemeral=True,
+            )
+
+    @app_commands.check(bot_owner_only)
+    @app_commands.describe(cog="Cog to unload")
     @group_bot.command()
     async def unload(self, interaction, cog: str):
         """Unloads a cog"""
         try:
             await self.bot.unload_extension(f"cogs.{cog}")
             await interaction.response.send_message(f"Unloaded {cog}!")
-        except Exception as exc:
+        except commands.ExtensionNotFound:
+            await interaction.response.send_message(f"Extension {cog} not found")
+        except commands.ExtensionNotLoaded:
+            await interaction.response.send_message(f"Extension {cog} is not loaded")
+        except commands.ExtensionFailed as exc:
             await interaction.response.send_message(
-                f"Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```"
+                f"Failed to unload cog!```\n{type(exc).__name__}: {exc}\n```",
+                ephemeral=True,
             )
 
     @app_commands.check(bot_owner_only)
@@ -83,22 +111,23 @@ class General(commands.Cog):
         await self.bot.close()
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(url="Link to the new pfp image")
     @group_bot.command()
     async def changepfp(self, interaction, url: str):
         """Change bot profile picture"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as r:
-                if r.status != 200:
-                    return await interaction.response.send_message(
-                        "Failed to retrieve image!"
-                    )
-                data = await r.read()
-                await self.bot.user.edit(avatar=data)
-                await interaction.response.send_message.send(
-                    "Profile picture changed successfully."
+        async with self.bot.session.get(url) as r:
+            if r.status != 200:
+                return await interaction.response.send_message(
+                    "Failed to retrieve image!"
                 )
+            data = await r.read()
+            await self.bot.user.edit(avatar=data)
+            await interaction.response.send_message.send(
+                "Profile picture changed successfully."
+            )
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(channel="Text channel to set as the error channel")
     @group_bot.command()
     async def seterrchannel(self, interaction, channel: discord.TextChannel):
         """Set the channel to output errors"""
@@ -127,6 +156,7 @@ class General(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(cog="Name of the cog to toggle")
     @group_bot.command()
     async def togglecog(self, interaction, cog: str):
         """Enables or disables a cog"""
@@ -142,6 +172,7 @@ class General(commands.Cog):
     )
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(member="Member to add to the blacklist")
     @blacklist.command(name="add")
     async def blacklist_add(self, interaction, member: discord.Member):
         """Adds member to blacklist"""
@@ -149,9 +180,11 @@ class General(commands.Cog):
             await interaction.response.send_message("User is already blacklisted")
             return
         self.bot.s.add(BlackList(userid=member.id, guild=interaction.guild.id))
+        self.bot.s.commit()
         await interaction.response.send_message(f"Blacklisted {member.mention}!")
 
     @app_commands.check(bot_owner_only)
+    @app_commands.describe(member="Member to remove from the blacklist")
     @blacklist.command(name="remove")
     async def blacklist_remove(self, interaction, member: discord.Member):
         """Removes member from blacklist."""
@@ -160,6 +193,7 @@ class General(commands.Cog):
             await interaction.response.send_message("User is not blacklisted")
             return
         self.bot.s.delete(user)
+        self.bot.s.commit()
         await interaction.response.send_message(
             f"Removed {member.mention} from blacklist!"
         )
