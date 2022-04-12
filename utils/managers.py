@@ -222,7 +222,7 @@ class RaffleManager:
             f"{interaction.user.mention} now you are participating in the raffle!",
             ephemeral=True,
         )
-        if len(raffle.entries) >= raffle.max_participants:
+        if raffle.max_participants and len(raffle.entries) >= raffle.max_participants:
             await self.stop_raffle(interaction.guild_id)
 
     def get_view(self, guild_id: int):

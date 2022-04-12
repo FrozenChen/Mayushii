@@ -127,7 +127,7 @@ class Raffle(commands.Cog, app_commands.Group):
             raffle_view = RaffleView(
                 custom_id=interaction.id,
                 guild_id=interaction.guild_id,
-                channel_id=interaction.channel.id,
+                channel_id=target_channel.id,
                 raffle_manager=self.bot.raffle_manager,
             )
             if url:
