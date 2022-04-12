@@ -37,8 +37,9 @@ class ConfirmationButtons(discord.ui.View):
 
 
 def create_error_embed(interaction, exc) -> discord.Embed:
+    name = interaction.command.name if interaction.command else "unknown"
     embed = discord.Embed(
-        title=f"Unexpected exception in command {interaction.command.name}",
+        title=f"Unexpected exception in command {name}",
         color=0xE50730,
     )
     trace = "".join(
@@ -48,7 +49,7 @@ def create_error_embed(interaction, exc) -> discord.Embed:
     embed.add_field(name="Exception Type", value=exc.__class__.__name__)
     embed.add_field(
         name="Information",
-        value=f"channel: {interaction.channel.mention if isinstance(interaction.channel, discord.TextChannel) else 'Direct Message'}\ncommand: {interaction.command.name}\nauthor: {interaction.user.mention}",
+        value=f"channel: {interaction.channel.mention if isinstance(interaction.channel, discord.TextChannel) else 'Direct Message'}\ncommand: {name}\nauthor: {interaction.user.mention}",
         inline=False,
     )
     return embed
