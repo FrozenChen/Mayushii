@@ -6,7 +6,7 @@ from utils.database import CommunityRole, Guild
 from utils.utilities import gen_color
 
 
-class Community(commands.Cog, app_commands.Group, name="communityrole"):
+class Community(commands.GroupCog, name="communityrole"):
     """General commands for members."""
 
     def __init__(self, bot):

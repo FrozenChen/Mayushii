@@ -16,7 +16,7 @@ from utils.utilities import (
 from utils.views import RaffleView, LinkButton
 
 
-class Raffle(commands.Cog, app_commands.Group):
+class Raffle(commands.GroupCog):
     """Raffle related commands"""
 
     def __init__(self, bot):

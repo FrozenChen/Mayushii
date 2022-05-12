@@ -28,6 +28,13 @@ class General(commands.Cog):
             "voting": 0b1000,
         }
 
+    @commands.has_guild_permissions(manage_guild=True)
+    @commands.guild_only()
+    @commands.command()
+    async def sync(self, ctx):
+        await ctx.bot.tree.sync()
+        await ctx.send("App commands synced.")
+
     @app_commands.command()
     async def about(self, interaction):
         """About Mayushii"""
@@ -38,7 +45,12 @@ class General(commands.Cog):
         embed.set_thumbnail(url="https://files.frozenchen.me/vD7vM.png")
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    group_bot = app_commands.Group(name="bot", description="Bot commands")
+    group_bot = app_commands.Group(
+        name="bot",
+        description="Bot commands",
+        default_permissions=discord.Permissions(administrator=True),
+        guild_only=True,
+    )
 
     @app_commands.check(bot_owner_only)
     @group_bot.command()
@@ -168,7 +180,10 @@ class General(commands.Cog):
         await interaction.response.send_message("Cog not found.")
 
     blacklist = app_commands.Group(
-        name="blacklist", description="Commands for the blacklist"
+        name="blacklist",
+        description="Commands for the blacklist",
+        default_permissions=discord.Permissions(administrator=True),
+        guild_only=True,
     )
 
     @app_commands.check(bot_owner_only)

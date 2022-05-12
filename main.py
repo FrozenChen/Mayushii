@@ -61,7 +61,6 @@ class Mayushii(commands.Bot):
                 self.s.add(Guild(id=guild.id, name=guild.name))
             self.s.commit()
         await self.load_cogs()
-        await self.tree.sync()
         self.logger.info(f"Initialized on {','.join(x.name for x in self.guilds)}")
 
     async def load_cogs(self):

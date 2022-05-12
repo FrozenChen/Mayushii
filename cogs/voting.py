@@ -14,7 +14,7 @@ def is_enabled(interaction):
     return dbguild.flags & 0b1000
 
 
-class Voting(commands.Cog, app_commands.Group, name="poll"):
+class Voting(commands.GroupCog, name="poll"):
     """Commands for managing a poll."""
 
     def __init__(self, bot):
@@ -61,11 +61,11 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
         interaction: discord.Interaction,
         name: str,
         description: str,
-        message: str,
         options: str,
         target_channel: discord.TextChannel,
         end_date: app_commands.Transform[datetime.datetime, DateTransformer] = None,
         lasts: app_commands.Transform[int, TimeTransformer] = None,
+        attachment: discord.Attachment = None,
         url: str = None,
     ):
         """Creates a poll"""
@@ -112,7 +112,9 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
             )
             if url:
                 vote_view.add_item(LinkButton(label="Gallery", url=url))
-            msg = await target_channel.send("Loading", view=vote_view)
+            msg = await target_channel.send(
+                "Loading", view=vote_view, file=await attachment.to_file()
+            )
             poll = self.bot.poll_manager.create_poll(
                 name=name,
                 options=options,
@@ -128,7 +130,7 @@ class Voting(commands.Cog, app_commands.Group, name="poll"):
             )
             await msg.edit(
                 content=None,
-                embed=self.bot.poll_manager.create_embed(poll, description=message),
+                embed=self.bot.poll_manager.create_embed(poll, description=description),
             )
             poll.active = True
             self.bot.s.commit()
