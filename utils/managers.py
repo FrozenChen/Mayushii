@@ -114,7 +114,9 @@ class VoteManager:
         else:
             old_vote = voter.option
             if voter.option == option:
-                await interaction.response.send_message("No change in your vote!")
+                await interaction.response.send_message(
+                    "No change in your vote!", ephemeral=True
+                )
             else:
                 voter.option = option
                 await interaction.response.send_message(
