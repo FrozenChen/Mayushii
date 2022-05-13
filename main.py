@@ -150,7 +150,6 @@ class Mayutree(app_commands.CommandTree):
     async def on_error(
         self,
         interaction: discord.Interaction,
-        command: Union[ContextMenu, Command, None],
         error: app_commands.AppCommandError,
     ):
         logger = self.logger
