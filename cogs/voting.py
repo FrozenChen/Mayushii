@@ -174,7 +174,9 @@ class Voting(commands.GroupCog, name="poll"):
     @app_commands.command()
     async def tally(self, interaction: discord.Interaction):
         """Show the current state of the poll"""
-        if poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id) is None:
+        if (
+            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id)
+        ) is None:
             return await interaction.response.send_message("There is no ongoing poll")
         result = self.bot.poll_manager.count_votes(poll)
         embed = discord.Embed()
