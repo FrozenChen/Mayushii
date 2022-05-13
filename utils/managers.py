@@ -81,23 +81,26 @@ class VoteManager:
             .one_or_none()
         )
 
-    async def end_poll(self, poll: Poll, view):
+    async def end_poll(self, poll: Poll, view, announce: bool):
+
         await view.stop()
-        result = self.count_votes(poll)
-        embed = discord.Embed(
-            title=f"The {poll.name} has ended!",
-            description="Congratulation to the winner!",
-        )
-        msg = ""
-        for x in result.keys():
-            msg += f"{x}: {result[x]}   "
-        embed.add_field(name="Votes", value=msg, inline=False)
 
-        if guild := self.bot.get_guild(view.guild_id):
+        if announce:
+            result = self.count_votes(poll)
+            embed = discord.Embed(
+                title=f"The {poll.name} has ended!",
+                description="Congratulation to the winner!",
+            )
+            msg = ""
+            for x in result.keys():
+                msg += f"{x}: {result[x]}   "
+            embed.add_field(name="Votes", value=msg, inline=False)
 
-            channel = guild.get_channel(view.channel_id)
-            if channel:
-                await channel.send(embed=embed)
+            if guild := self.bot.get_guild(view.guild_id):
+
+                channel = guild.get_channel(view.channel_id)
+                if channel:
+                    await channel.send(embed=embed)
         del self.polls[poll.guild_id]
         poll.active = False
         self.bot.s.commit()

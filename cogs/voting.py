@@ -154,8 +154,21 @@ class Voting(commands.GroupCog, name="poll"):
             return await interaction.response.send_message("No ongoing poll")
 
         view = discord.utils.get(self.bot.persistent_views, custom_id=poll.custom_id)
-        await self.bot.poll_manager.end_poll(poll, view)
+        await self.bot.poll_manager.end_poll(poll, view, announce=True)
         await interaction.response.send_message("Poll closed successfully")
+
+    @app_commands.checks.has_permissions(manage_channels=True)
+    @app_commands.command()
+    async def cancel(self, interaction: discord.Interaction):
+        """Cancels a poll"""
+        if (
+            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id)
+        ) is None:
+            return await interaction.response.send_message("No ongoing poll")
+
+        view = discord.utils.get(self.bot.persistent_views, custom_id=poll.custom_id)
+        await self.bot.poll_manager.end_poll(poll, view, announce=False)
+        await interaction.response.send_message("Poll cancelled successfully")
 
     @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.command()
