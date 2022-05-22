@@ -32,6 +32,15 @@ class General(commands.Cog):
             "voting": 0b1000,
         }
 
+        self.getpfp_menu = app_commands.ContextMenu(
+            name="Get pfp",
+            callback=self.getpfp_menu_callback,
+        )
+        self.bot.tree.add_command(self.getpfp_menu)
+
+    async def cog_unload(self):
+        self.bot.tree.remove_command(self.getpfp_menu.name, type=self.getpfp_menu.type)
+
     @commands.has_guild_permissions(manage_guild=True)
     @commands.guild_only()
     @commands.command()
@@ -216,6 +225,12 @@ class General(commands.Cog):
         await interaction.response.send_message(
             f"Removed {member.mention} from blacklist!"
         )
+
+    async def getpfp_menu_callback(self, interaction, member: discord.Member):
+        """Gets the user's pfp"""
+        embed = discord.Embed(title=f"{member}'s pfp")
+        embed.set_image(url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
 async def setup(bot):
