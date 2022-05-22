@@ -26,15 +26,16 @@ class Voting(commands.GroupCog, name="poll"):
 
     async def cog_load(self):
         for guild, poll in self.bot.poll_manager.polls.items():
-            self.bot.add_view(
-                VoteView(
-                    options=poll.parsed_options,
-                    custom_id=poll.custom_id,
-                    guild_id=poll.guild_id,
-                    poll_manager=self.bot.poll_manager,
-                    channel_id=poll.channel_id,
-                )
+            view = VoteView(
+                options=poll.parsed_options,
+                custom_id=poll.custom_id,
+                guild_id=poll.guild_id,
+                poll_manager=self.bot.poll_manager,
+                channel_id=poll.channel_id,
             )
+            view.message_id = poll.message_id
+            self.bot.add_view(view)
+
         self.check_views.start()
 
     @tasks.loop(seconds=60.0)
@@ -127,6 +128,7 @@ class Voting(commands.GroupCog, name="poll"):
             file = await attachment.to_file() if attachment else None
 
             msg = await target_channel.send("Loading", view=vote_view, file=file)  # type: ignore
+            vote_view.message_id = msg.id
             poll = self.bot.poll_manager.create_poll(
                 name=name,
                 options=options,
