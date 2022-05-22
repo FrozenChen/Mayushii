@@ -101,13 +101,11 @@ class VoteManager:
                 msg += f"{x}: {result[x]}   "
             embed.add_field(name="Votes", value=msg, inline=False)
 
-            if guild := self.bot.get_guild(view.guild_id):
+            try:
+                await view.messageable.send(embed=embed)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
 
-                channel = guild.get_channel(view.channel_id)
-                if channel and isinstance(
-                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
-                ):
-                    await channel.send(embed=embed)
         del self.polls[poll.guild_id]
         poll.active = False  # type: ignore
         self.bot.s.commit()
@@ -267,13 +265,10 @@ class RaffleManager:
             for winner in result:
                 msg += f"{winner.mention} "
             embed.add_field(name="Winners", value=msg, inline=False)
-
-            if guild := self.bot.get_guild(view.guild_id):
-                channel = guild.get_channel(view.channel_id)
-                if channel and isinstance(
-                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
-                ):
-                    await channel.send(embed=embed)
+            try:
+                await view.messageable.send(embed=embed)
+            except (discord.Forbidden, discord.HTTPException):
+                pass
             del self.raffles[guild_id]
 
     @staticmethod

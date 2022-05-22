@@ -26,15 +26,15 @@ class Voting(commands.GroupCog, name="poll"):
 
     async def cog_load(self):
         for guild, poll in self.bot.poll_manager.polls.items():
-            view = VoteView(
-                options=poll.parsed_options,
-                custom_id=poll.custom_id,
-                guild_id=poll.guild_id,
-                poll_manager=self.bot.poll_manager,
-                channel_id=poll.channel_id,
+            self.bot.add_view(
+                VoteView(
+                    options=poll.parsed_options,
+                    custom_id=poll.custom_id,
+                    message_id=poll.message_id,
+                    poll_manager=self.bot.poll_manager,
+                    channel_id=poll.channel_id,
+                )
             )
-            view.message_id = poll.message_id
-            self.bot.add_view(view)
 
         self.check_views.start()
 
@@ -118,7 +118,6 @@ class Voting(commands.GroupCog, name="poll"):
             vote_view = VoteView(
                 options=parsed_options,
                 custom_id=interaction.id,
-                guild_id=interaction.guild.id,
                 poll_manager=self.bot.poll_manager,
                 channel_id=target_channel.id,
             )

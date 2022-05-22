@@ -18,7 +18,7 @@ class VoteButton(discord.ui.Button["VoteView"]):
 
     async def callback(self, interaction: discord.Interaction):
         assert self.view is not None
-        await self.view.poll_manager.process_vote(interaction, option=self.label)
+        await self.view.manager.process_vote(interaction, option=self.label)
 
 
 class LinkButton(discord.ui.Button):
@@ -26,41 +26,60 @@ class LinkButton(discord.ui.Button):
         super().__init__(label=label, url=url, style=discord.ButtonStyle.link)
 
 
-class VoteView(discord.ui.View):
+class BasePersistentView(discord.ui.View):
     def __init__(
         self,
-        options: list[str],
         custom_id: int,
-        guild_id: int,
         channel_id: int,
-        poll_manager: VoteManager,
+        manager,
+        message_id: Optional[int] = None,
     ):
+
         super().__init__(timeout=None)
         self.custom_id = custom_id
-        self.message_id = None
+        self.message_id = message_id
         self.channel_id = channel_id
-        self.guild_id = guild_id
-        self.poll_manager = poll_manager
-        for n, option in enumerate(options):
-            self.add_item(VoteButton(label=option, custom_id=f"{custom_id}_{n}"))
-
-    async def interaction_check(self, interaction: discord.Interaction):
-        return (
-            not_new(interaction)
-            and not_blacklisted(interaction)
-            and self.poll_manager.ongoing_poll(self.guild_id)
+        self.manager = manager
+        self.messageable: discord.PartialMessageable = (
+            self.manager.bot.get_partial_messageable(id=self.channel_id)
         )
 
     async def stop(self):
         if self.message_id:
-            if guild := self.poll_manager.bot.get_guild(self.guild_id):
-                channel = guild.get_channel(self.channel_id)
-                if channel and isinstance(
-                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
-                ):
-                    msg = await channel.fetch_message(self.message_id)
-                    await msg.edit(view=None)
+            try:
+                msg = await self.messageable.fetch_message(self.message_id)
+                await msg.edit(view=None)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                pass
         super().stop()
+
+
+class VoteView(BasePersistentView):
+    def __init__(
+        self,
+        custom_id: int,
+        channel_id: int,
+        poll_manager: VoteManager,
+        message_id: Optional[int] = None,
+        *,
+        options: list[str],
+    ):
+        super().__init__(
+            custom_id=custom_id,
+            channel_id=channel_id,
+            manager=poll_manager,
+            message_id=message_id,
+        )
+        for n, option in enumerate(options):
+            self.add_item(VoteButton(label=option, custom_id=f"{custom_id}_{n}"))
+
+    async def interaction_check(self, interaction: discord.Interaction):
+        assert interaction.guild is not None
+        return (
+            not_new(interaction)
+            and not_blacklisted(interaction)
+            and self.manager.ongoing_poll(interaction.guild.id)
+        )
 
 
 class RaffleButton(discord.ui.Button["RaffleView"]):
@@ -74,43 +93,31 @@ class RaffleButton(discord.ui.Button["RaffleView"]):
 
     async def callback(self, interaction: discord.Interaction):
         assert self.view is not None
-        await self.view.raffle_manager.process_entry(interaction)
+        await self.view.manager.process_entry(interaction)
 
 
-class RaffleView(discord.ui.View):
+class RaffleView(BasePersistentView):
     def __init__(
         self,
         custom_id: int,
-        guild_id: int,
         channel_id: int,
         raffle_manager: RaffleManager,
         message_id: Optional[int] = None,
     ):
-        super().__init__(timeout=None)
-        self.custom_id = custom_id
-        self.message_id = message_id
-        self.channel_id = channel_id
-        self.guild_id = guild_id
-        self.raffle_manager = raffle_manager
+        super().__init__(
+            custom_id=custom_id,
+            channel_id=channel_id,
+            manager=raffle_manager,
+            message_id=message_id,
+        )
         self.add_item(RaffleButton(label="Join", custom_id=f"{custom_id}_join"))
 
     async def interaction_check(self, interaction: discord.Interaction):
         assert interaction.guild is not None
         if not_new(interaction) and not_blacklisted(interaction):
-            if not self.raffle_manager.get_raffle(interaction.guild.id):
+            if not self.manager.get_raffle(interaction.guild.id):
                 await interaction.response.send_message(
                     "There is no ongoing raffle", ephemeral=True
                 )
                 return False
         return True
-
-    async def stop(self):
-        if self.message_id:
-            if guild := self.raffle_manager.bot.get_guild(self.guild_id):
-                channel = guild.get_channel(self.channel_id)
-                if channel and isinstance(
-                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
-                ):
-                    msg = await channel.fetch_message(self.message_id)
-                    await msg.edit(view=None)
-        super().stop()

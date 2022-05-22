@@ -44,7 +44,6 @@ class Raffle(commands.GroupCog):
         for guild_id, raffle in self.bot.raffle_manager.raffles.items():
             view = RaffleView(
                 custom_id=raffle.custom_id,
-                guild_id=raffle.guild_id,
                 message_id=raffle.message_id,
                 raffle_manager=self.bot.raffle_manager,
                 channel_id=raffle.channel_id,
@@ -138,7 +137,6 @@ class Raffle(commands.GroupCog):
                     )
             raffle_view = RaffleView(
                 custom_id=interaction.id,
-                guild_id=interaction.guild.id,
                 channel_id=target_channel.id,
                 raffle_manager=self.bot.raffle_manager,
             )
