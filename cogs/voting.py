@@ -3,10 +3,11 @@ import datetime
 
 from discord.ext import commands, tasks
 from discord import app_commands
+from typing import Optional
 from utils.database import Poll, Guild
+from utils.managers import VoteManager
 from utils.utilities import ConfirmationButtons, TimeTransformer, DateTransformer
 from utils.views import VoteView, LinkButton
-from utils.managers import VoteManager
 
 
 def is_enabled(interaction):
@@ -63,14 +64,22 @@ class Voting(commands.GroupCog, name="poll"):
         description: str,
         options: str,
         target_channel: discord.TextChannel,
-        end_date: app_commands.Transform[datetime.datetime, DateTransformer] = None,
-        lasts: app_commands.Transform[int, TimeTransformer] = None,
+        end_date: app_commands.Transform[
+            Optional[datetime.datetime], DateTransformer
+        ] = None,
+        lasts: app_commands.Transform[Optional[int], TimeTransformer] = None,
         attachment: discord.Attachment = None,
         url: str = None,
     ):
         """Creates a poll"""
-        if self.bot.poll_manager.get_ongoing_poll(interaction.guild_id):
-            return await interaction.response.send(
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
+        if self.bot.poll_manager.get_ongoing_poll(interaction.guild.id):
+            return await interaction.response.send_message(
                 "There is an ongoing poll!", ephemeral=True
             )
         if lasts and end_date:
@@ -97,7 +106,9 @@ class Voting(commands.GroupCog, name="poll"):
                 if lasts:
                     diff = datetime.timedelta(seconds=lasts)
                     end_date = start + diff
-                if end_date < start or (end_date - start).total_seconds() < 600:
+                if end_date and (
+                    end_date < start or (end_date - start).total_seconds() < 600
+                ):
                     return await interaction.edit_original_message(
                         content="A poll has to last longer than 10 minutes",
                         view=None,
@@ -106,19 +117,20 @@ class Voting(commands.GroupCog, name="poll"):
             vote_view = VoteView(
                 options=parsed_options,
                 custom_id=interaction.id,
-                guild_id=interaction.guild_id,
+                guild_id=interaction.guild.id,
                 poll_manager=self.bot.poll_manager,
                 channel_id=target_channel.id,
             )
             if url:
                 vote_view.add_item(LinkButton(label="Gallery", url=url))
-            msg = await target_channel.send(
-                "Loading", view=vote_view, file=await attachment.to_file()
-            )
+
+            file = await attachment.to_file() if attachment else None
+
+            msg = await target_channel.send("Loading", view=vote_view, file=file)  # type: ignore
             poll = self.bot.poll_manager.create_poll(
                 name=name,
                 options=options,
-                guild_id=interaction.guild_id,
+                guild_id=interaction.guild.id,
                 message_id=msg.id,
                 url=url,
                 author_id=interaction.user.id,
@@ -148,8 +160,13 @@ class Voting(commands.GroupCog, name="poll"):
     @app_commands.command()
     async def close(self, interaction: discord.Interaction):
         """Closes a poll"""
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         if (
-            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id)
+            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild.id)
         ) is None:
             return await interaction.response.send_message("No ongoing poll")
 
@@ -161,8 +178,14 @@ class Voting(commands.GroupCog, name="poll"):
     @app_commands.command()
     async def cancel(self, interaction: discord.Interaction):
         """Cancels a poll"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         if (
-            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id)
+            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild.id)
         ) is None:
             return await interaction.response.send_message("No ongoing poll")
 
@@ -174,8 +197,14 @@ class Voting(commands.GroupCog, name="poll"):
     @app_commands.command()
     async def tally(self, interaction: discord.Interaction):
         """Show the current state of the poll"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         if (
-            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild_id)
+            poll := self.bot.poll_manager.get_ongoing_poll(interaction.guild.id)
         ) is None:
             return await interaction.response.send_message("There is no ongoing poll")
         result = self.bot.poll_manager.count_votes(poll)
@@ -190,6 +219,12 @@ class Voting(commands.GroupCog, name="poll"):
     @app_commands.command()
     async def list(self, interaction: discord.Interaction):
         """Shows a list with current and past polls"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         polls = (
             self.bot.s.query(Poll).filter(Poll.guild_id == interaction.guild.id).all()
         )
@@ -212,6 +247,12 @@ class Voting(commands.GroupCog, name="poll"):
     @app_commands.command()
     async def delete(self, interaction: discord.Interaction, poll_id: int):
         """Deletes a poll"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         poll = (
             self.bot.s.query(Poll)
             .filter(Poll.id == poll_id, Poll.guild_id == interaction.guild.id)
@@ -222,7 +263,7 @@ class Voting(commands.GroupCog, name="poll"):
                 "No poll associated with provided ID"
             )
         else:
-            if poll == self.bot.poll_manager.get_ongoing_poll(interaction.guild_id):
+            if poll == self.bot.poll_manager.get_ongoing_poll(interaction.guild.id):
                 del self.bot.poll_manager.polls[interaction.guild.id]
             self.bot.s.delete(poll)
             self.bot.s.commit()
@@ -230,19 +271,26 @@ class Voting(commands.GroupCog, name="poll"):
 
     @app_commands.checks.has_permissions(ban_members=True)
     @app_commands.command()
-    async def info(self, interaction: discord.Interaction, poll_id: int = None):
+    async def info(
+        self, interaction: discord.Interaction, poll_id: Optional[int] = None
+    ):
         """Shows info about current poll or provided poll id"""
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         if poll_id is None:
-            if self.bot.poll_manager.get_ongoing_poll(interaction.guild_id) is None:
+            if self.bot.poll_manager.get_ongoing_poll(interaction.guild.id) is None:
                 await interaction.response.send_message(
                     "There is no ongoing poll", ephemeral=True
                 )
                 return
             else:
                 poll_id = self.bot.poll_manager.get_ongoing_poll(
-                    interaction.guild_id
+                    interaction.guild.id
                 ).id
-        poll = self.bot.poll_manager.get_poll(poll_id, interaction.guild_id)
+        poll = self.bot.poll_manager.get_poll(poll_id, interaction.guild.id)
         embed = discord.Embed(title=poll.name, color=discord.Color.blurple())
         embed.add_field(name="ID", value=poll.id, inline=False)
         if poll.url:

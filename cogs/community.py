@@ -123,6 +123,12 @@ class Community(commands.GroupCog, name="communityrole"):
         description: str,
     ):
         """Makes a server role as a community role"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         top_role = interaction.guild.me.top_role
         if (
             self.bot.s.query(CommunityRole)

@@ -1,12 +1,17 @@
+from __future__ import annotations
+
 import discord
 import random
-import utils
 
 from datetime import datetime
-from typing import Optional, Literal
 from main import Mayushii
+from typing import Optional, Literal, TYPE_CHECKING
 from utils.database import Poll, Voter, Giveaway, GiveawayEntry, GiveawayRole
 from utils.exceptions import NoOnGoingPoll
+from utils.utilities import gen_color
+
+if TYPE_CHECKING:
+    from utils.views import RaffleView
 
 
 class VoteManager:
@@ -57,7 +62,7 @@ class VoteManager:
 
     def count_votes(self, poll: Poll) -> dict[str, int]:
         result = {}
-        for option in self.parse_options(poll.options):
+        for option in self.parse_options(poll.options):  # type: ignore
             c = (
                 self.bot.s.query(Voter)
                 .filter_by(poll_id=poll.id, option=option)
@@ -99,15 +104,21 @@ class VoteManager:
             if guild := self.bot.get_guild(view.guild_id):
 
                 channel = guild.get_channel(view.channel_id)
-                if channel:
+                if channel and isinstance(
+                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
+                ):
                     await channel.send(embed=embed)
         del self.polls[poll.guild_id]
-        poll.active = False
+        poll.active = False  # type: ignore
         self.bot.s.commit()
 
     async def process_vote(self, interaction: discord.Interaction, option: str):
+        assert interaction.guild is not None
+        assert isinstance(interaction.user, discord.Member)
         voter = self.get_voter(interaction.user)
-        poll = self.get_ongoing_poll(interaction.guild_id)
+        poll = self.get_ongoing_poll(interaction.guild.id)
+        if poll is None:  # Could this happen?
+            return
         if voter is None:
             voter = Voter(userid=interaction.user.id, poll_id=poll.id, option=option)
             self.bot.s.add(voter)
@@ -132,7 +143,7 @@ class VoteManager:
         return discord.Embed(
             title=poll.name,
             description=description,
-            colour=utils.utilities.gen_color(poll.id),
+            colour=gen_color(poll.id),
         )
 
 
@@ -195,22 +206,25 @@ class RaffleManager:
         if len(raffle.entries) >= raffle.win_count:
             while len(winners) != raffle.win_count:
                 entry: GiveawayEntry = random.choice(raffle.entries)
-                if (winner := guild.get_member(entry.user_id)) is not None:
-                    entry.winner = True
+                if (winner := guild.get_member(entry.user_id)) is not None:  # type: ignore
+                    entry.winner = True  # type: ignore
+                    self.bot.s.commit()
                     winners.append(winner)
                 else:
                     self.bot.s.delete(entry)
         return winners
 
     async def process_entry(self, interaction: discord.Interaction):
-        raffle = self.get_raffle(interaction.guild_id)
-        if not raffle.ongoing:
+        assert interaction.guild is not None
+        assert isinstance(interaction.user, discord.Member)
+        raffle = self.get_raffle(interaction.guild.id)
+        if not raffle or not raffle.ongoing:
             return await interaction.response.send_message(
                 "The raffle has ended", ephemeral=True
             )
         if raffle.roles:
             for role in raffle.roles:
-                if not any(discord.utils.get(interaction.user.roles, id=role.id)):
+                if not discord.utils.get(interaction.user.roles, id=role.id):
                     return await interaction.response.send_message(
                         "You are not allowed to participate!", ephemeral=True
                     )
@@ -228,38 +242,44 @@ class RaffleManager:
             ephemeral=True,
         )
         if raffle.max_participants and len(raffle.entries) >= raffle.max_participants:
-            await self.stop_raffle(interaction.guild_id)
+            await self.stop_raffle(interaction.guild.id)
 
-    def get_view(self, guild_id: int):
+    def get_view(self, guild_id: int) -> Optional[RaffleView]:
         raffle = self.get_raffle(guild_id)
-        return discord.utils.get(self.bot.persistent_views, custom_id=raffle.custom_id)
+        if not raffle:
+            return None
+        view = discord.utils.get(self.bot.persistent_views, custom_id=raffle.custom_id)
+        return view if isinstance(view, RaffleView) else None
 
     async def stop_raffle(self, guild_id: int):
         view = self.get_view(guild_id)
         raffle = self.raffles[guild_id]
-        raffle.ongoing = False
+        raffle.ongoing = False  # type: ignore
         self.bot.s.commit()
-        await view.stop()
-        result = self.get_winners(guild_id)
-        embed = discord.Embed(
-            title=f"The {raffle.name} raffle has ended!",
-            description="Congratulation to the winner(s)!",
-        )
-        msg = ""
-        for winner in result:
-            msg += f"{winner.mention} "
-        embed.add_field(name="Winners", value=msg, inline=False)
+        if view is not None:
+            await view.stop()
+            result = self.get_winners(guild_id)
+            embed = discord.Embed(
+                title=f"The {raffle.name} raffle has ended!",
+                description="Congratulation to the winner(s)!",
+            )
+            msg = ""
+            for winner in result:
+                msg += f"{winner.mention} "
+            embed.add_field(name="Winners", value=msg, inline=False)
 
-        if guild := self.bot.get_guild(view.guild_id):
-            channel = guild.get_channel(view.channel_id)
-            if channel:
-                await channel.send(embed=embed)
-        del self.raffles[guild_id]
+            if guild := self.bot.get_guild(view.guild_id):
+                channel = guild.get_channel(view.channel_id)
+                if channel and isinstance(
+                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
+                ):
+                    await channel.send(embed=embed)
+            del self.raffles[guild_id]
 
     @staticmethod
     def create_embed(raffle: Giveaway, description="") -> discord.Embed:
         return discord.Embed(
             title=raffle.name,
             description=description,
-            colour=utils.utilities.gen_color(raffle.id),
+            colour=gen_color(raffle.id),
         )

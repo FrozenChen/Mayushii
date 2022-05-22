@@ -5,37 +5,49 @@ import json
 import sqlalchemy.orm
 
 from discord import app_commands
-from discord.app_commands import ContextMenu, Command
 from discord.ext import commands
-from typing import Union, Optional
-from traceback import format_exception
-from utils import exceptions
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from typing import Optional
+from traceback import format_exception
 from utils.database import Guild, Base
-from utils.exceptions import DisabledCog, BotOwnerOnly
+from utils.exceptions import (
+    DisabledCog,
+    BotOwnerOnly,
+    TooNew,
+    NoOnGoingPoll,
+    NoOnGoingRaffle,
+    BlackListed,
+    NoArtChannel,
+)
 from utils.utilities import create_error_embed
 
 cogs = ["cogs.gallery", "cogs.general", "cogs.voting", "cogs.raffle", "cogs.community"]
 
 
 class Mayushii(commands.Bot):
+    user: discord.ClientUser
+    s: sqlalchemy.orm.Session
+    session: aiohttp.ClientSession
+
     def __init__(self, command_prefix, **options):
         super().__init__(command_prefix, **options)
         self.logger = self.get_logger(self.__class__)
         self.logger.info("Loading config.json")
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.s: Optional[sqlalchemy.orm.Session] = None
         with open("data/config.json") as config:
             self.config = json.load(config)
         self.owner_id = self.config["owner"]
 
     async def setup_hook(self) -> None:
+        engine = create_engine("sqlite:///data/mayushii.db")
+        session = sessionmaker(bind=engine)
+        self.s: sqlalchemy.orm.Session = session()
+        Base.metadata.create_all(engine)
         self.session = aiohttp.ClientSession()
 
     @staticmethod
-    def get_logger(self):
-        logger = logging.getLogger(self.__class__.__name__)
+    def get_logger(object):
+        logger = logging.getLogger(object.__class__.__name__)
         logger.setLevel(logging.DEBUG)
         ch = logging.StreamHandler()
         fh = logging.FileHandler("mayushii.log")
@@ -52,10 +64,6 @@ class Mayushii(commands.Bot):
         return logger
 
     async def on_ready(self):
-        engine = create_engine("sqlite:///data/mayushii.db")
-        session = sessionmaker(bind=engine)
-        self.s: sqlalchemy.orm.session = session()
-        Base.metadata.create_all(engine)
         for guild in self.guilds:
             if not self.s.query(Guild).get(guild.id):
                 self.s.add(Guild(id=guild.id, name=guild.name))
@@ -71,9 +79,10 @@ class Mayushii(commands.Bot):
             except commands.ExtensionNotFound:
                 self.logger.error(f"Extension {cog} not found")
 
-    def get_error_channel(self, interaction):
+    def get_error_channel(self, interaction) -> Optional[discord.TextChannel]:
         if dbguild := self.s.query(Guild).get(interaction.guild.id):
-            error_channel = interaction.guild.get_channel(dbguild.error_channel)
+            c = interaction.guild.get_channel(dbguild.error_channel)
+            error_channel = c if c.type == discord.ChannelType.text else None
         else:
             error_channel = None
         return error_channel
@@ -90,14 +99,14 @@ class Mayushii(commands.Bot):
             exc,
             (
                 commands.NoPrivateMessage,
-                exceptions.TooNew,
-                exceptions.NoOnGoingPoll,
-                exceptions.NoOnGoingRaffle,
+                TooNew,
+                NoOnGoingPoll,
+                NoOnGoingRaffle,
             ),
         ):
             await ctx.send(exc)
 
-        elif isinstance(exc, exceptions.BlackListed):
+        elif isinstance(exc, BlackListed):
             await ctx.author.send(exc)
 
         elif isinstance(exc, commands.CheckFailure):
@@ -110,7 +119,7 @@ class Mayushii(commands.Bot):
         elif isinstance(exc, commands.MissingRequiredArgument):
             await ctx.send(exc)
             await ctx.send_help(ctx.command)
-        elif isinstance(exc, discord.ext.commands.errors.CommandOnCooldown):
+        elif isinstance(exc, commands.CommandOnCooldown):
             await ctx.send(
                 f"This command is on cooldown, try again in {exc.retry_after:.2f}s.",
                 delete_after=10,
@@ -131,7 +140,7 @@ class Mayushii(commands.Bot):
             await ctx.send(f"Unhandled exception in `{ctx.command}`")
             exc = f"{''.join(format_exception(type(exc), exc, exc.__traceback__))}"
             logger.error(f"Unhandled exception occurred in {ctx.command}")
-            logger.debug(exc)
+            logger.error(exc)
             if error_channel:
                 await error_channel.send(exc)
 
@@ -142,9 +151,12 @@ class Mayushii(commands.Bot):
 
 
 class Mayutree(app_commands.CommandTree):
+    bot: Mayushii
+
     def __init__(self, client):
         super().__init__(client)
         self.err_channel = None
+        self.bot = client
         self.logger = logging.getLogger(__name__)
 
     async def on_error(
@@ -153,17 +165,17 @@ class Mayutree(app_commands.CommandTree):
         error: app_commands.AppCommandError,
     ):
         logger = self.logger
-        error_channel = interaction.client.get_error_channel(interaction)
+        error_channel = self.bot.get_error_channel(interaction)
         command_name = interaction.command.name if interaction.command else "unknown"
         if isinstance(
             error,
             (
-                exceptions.TooNew,
-                exceptions.NoOnGoingPoll,
-                exceptions.BotOwnerOnly,
-                exceptions.NoOnGoingRaffle,
-                exceptions.BlackListed,
-                exceptions.NoArtChannel,
+                TooNew,
+                NoOnGoingPoll,
+                BotOwnerOnly,
+                NoOnGoingRaffle,
+                BlackListed,
+                NoArtChannel,
             ),
         ):
             await interaction.response.send_message(error, ephemeral=True)

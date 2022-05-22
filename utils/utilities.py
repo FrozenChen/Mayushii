@@ -1,13 +1,13 @@
-import re
-from datetime import datetime
 import discord
 import random
+import re
 import traceback
 
-# thanks ihaveahax
+from datetime import datetime
 from discord import app_commands
 
 
+# thanks ihaveahax
 def gen_color(seed) -> discord.Color:
     random.seed(seed)
     c_r = random.randint(0, 255)
@@ -23,14 +23,18 @@ class ConfirmationButtons(discord.ui.View):
 
     @discord.ui.button(label="Yes", style=discord.ButtonStyle.green)
     async def confirm_button(
-        self, button: discord.ui.Button, interaction: discord.Interaction
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
     ):
         self.value = True
         self.stop()
 
     @discord.ui.button(label="No", style=discord.ButtonStyle.red)
     async def deny_button(
-        self, button: discord.ui.Button, interaction: discord.Interaction
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,
     ):
         self.value = False
         self.stop()
@@ -100,6 +104,8 @@ class GreedyRoleTransformer(app_commands.Transformer):
     ) -> list[discord.Role]:
         data = value.split(",")
         roles = []
+        if not interaction.guild:
+            raise app_commands.NoPrivateMessage()
         for role_id in data:
             try:
                 role = interaction.guild.get_role(int(role_id))

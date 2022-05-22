@@ -1,10 +1,13 @@
 import discord
 
+from typing import Optional
 from utils.checks import not_new, not_blacklisted
 from utils.managers import VoteManager, RaffleManager
 
 
 class VoteButton(discord.ui.Button["VoteView"]):
+    label: str
+
     def __init__(
         self,
         custom_id: str,
@@ -14,6 +17,7 @@ class VoteButton(discord.ui.Button["VoteView"]):
         super().__init__(style=style, label=label, custom_id=custom_id)
 
     async def callback(self, interaction: discord.Interaction):
+        assert self.view is not None
         await self.view.poll_manager.process_vote(interaction, option=self.label)
 
 
@@ -51,7 +55,9 @@ class VoteView(discord.ui.View):
         if self.message_id:
             if guild := self.poll_manager.bot.get_guild(self.guild_id):
                 channel = guild.get_channel(self.channel_id)
-                if channel:
+                if channel and isinstance(
+                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
+                ):
                     msg = await channel.fetch_message(self.message_id)
                     await msg.edit(view=None)
         super().stop()
@@ -67,6 +73,7 @@ class RaffleButton(discord.ui.Button["RaffleView"]):
         super().__init__(style=style, label=label, custom_id=custom_id)
 
     async def callback(self, interaction: discord.Interaction):
+        assert self.view is not None
         await self.view.raffle_manager.process_entry(interaction)
 
 
@@ -77,7 +84,7 @@ class RaffleView(discord.ui.View):
         guild_id: int,
         channel_id: int,
         raffle_manager: RaffleManager,
-        message_id: int = None,
+        message_id: Optional[int] = None,
     ):
         super().__init__(timeout=None)
         self.custom_id = custom_id
@@ -88,8 +95,9 @@ class RaffleView(discord.ui.View):
         self.add_item(RaffleButton(label="Join", custom_id=f"{custom_id}_join"))
 
     async def interaction_check(self, interaction: discord.Interaction):
+        assert interaction.guild is not None
         if not_new(interaction) and not_blacklisted(interaction):
-            if not self.raffle_manager.get_raffle(interaction.guild_id):
+            if not self.raffle_manager.get_raffle(interaction.guild.id):
                 await interaction.response.send_message(
                     "There is no ongoing raffle", ephemeral=True
                 )
@@ -100,7 +108,9 @@ class RaffleView(discord.ui.View):
         if self.message_id:
             if guild := self.raffle_manager.bot.get_guild(self.guild_id):
                 channel = guild.get_channel(self.channel_id)
-                if channel:
+                if channel and isinstance(
+                    channel, (discord.TextChannel, discord.VoiceChannel, discord.Thread)
+                ):
                     msg = await channel.fetch_message(self.message_id)
                     await msg.edit(view=None)
         super().stop()

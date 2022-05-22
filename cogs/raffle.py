@@ -1,5 +1,7 @@
 import asyncio
 import datetime
+from typing import Optional
+
 import discord
 
 from discord import app_commands
@@ -14,6 +16,18 @@ from utils.utilities import (
     GreedyRoleTransformer,
 )
 from utils.views import RaffleView, LinkButton
+
+
+def ongoing_raffle(interaction):
+    raffle = interaction.client.raffle_manager.get_raffle(interaction.guild.id)
+    if raffle and raffle.ongoing:
+        return True
+    raise NoOnGoingRaffle("There is no ongoing raffle.")
+
+
+def is_enabled(interaction):
+    dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
+    return dbguild.flags & 0b100
 
 
 class Raffle(commands.GroupCog):
@@ -48,18 +62,6 @@ class Raffle(commands.GroupCog):
                 )
                 await self.bot.raffle_manager.end_raffle(raffle, view)
 
-    @staticmethod
-    def is_enabled(interaction):
-        dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
-        return dbguild.flags & 0b100
-
-    # checks
-    def ongoing_raffle(interaction):
-        raffle = interaction.client.raffle_manager.get_raffle(interaction.guild_id)
-        if raffle and raffle.ongoing:
-            return True
-        raise NoOnGoingRaffle("There is no ongoing raffle.")
-
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.describe(
         name="Name of the new raffle",
@@ -73,16 +75,24 @@ class Raffle(commands.GroupCog):
         name: str,
         description: str,
         target_channel: discord.TextChannel,
-        url: str = None,
+        url: Optional[str] = None,
         winners: int = 1,
-        max_participants: int = None,
-        end_date: app_commands.Transform[datetime.datetime, DateTransformer] = None,
-        lasts: app_commands.Transform[int, TimeTransformer] = None,
+        max_participants: Optional[int] = None,
+        end_date: app_commands.Transform[
+            Optional[datetime.datetime], DateTransformer
+        ] = None,
+        lasts: app_commands.Transform[Optional[int], TimeTransformer] = None,
         allowed_roles: app_commands.Transform[
-            list[discord.Role], GreedyRoleTransformer
+            Optional[list[discord.Role]], GreedyRoleTransformer
         ] = None,
     ):
         """Creates a giveaway"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         if self.bot.raffle_manager.get_raffle(interaction.guild.id):
             return await interaction.response.send_message(
                 "There is an already ongoing giveaway!", ephemeral=True
@@ -118,7 +128,9 @@ class Raffle(commands.GroupCog):
                 if lasts:
                     diff = datetime.timedelta(seconds=lasts)
                     end_date = start + diff
-                if end_date < start or (end_date - start).total_seconds() < 600:
+                if end_date and (
+                    end_date < start or (end_date - start).total_seconds() < 600
+                ):
                     return await interaction.edit_original_message(
                         content="A raffle has to last longer than 10 minutes",
                         view=None,
@@ -126,7 +138,7 @@ class Raffle(commands.GroupCog):
                     )
             raffle_view = RaffleView(
                 custom_id=interaction.id,
-                guild_id=interaction.guild_id,
+                guild_id=interaction.guild.id,
                 channel_id=target_channel.id,
                 raffle_manager=self.bot.raffle_manager,
             )
@@ -142,7 +154,7 @@ class Raffle(commands.GroupCog):
                 win_count=winners,
                 max_participants=max_participants,
                 roles=allowed_roles,
-                guild_id=interaction.guild_id,
+                guild_id=interaction.guild.id,
                 channel_id=target_channel.id,
                 message_id=msg.id,
                 author_id=interaction.user.id,
@@ -191,6 +203,12 @@ class Raffle(commands.GroupCog):
     @app_commands.command()
     async def cancel(self, interaction: discord.Interaction):
         """Cancels current giveaway"""
+
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
         view = ConfirmationButtons()
         await interaction.response.send_message(
             "Are you sure you want to cancel current giveaway?", view=view
@@ -213,7 +231,12 @@ class Raffle(commands.GroupCog):
     @app_commands.command()
     async def finish(self, interaction: discord.Interaction):
         """Finishes the current raffle"""
-        await self.bot.raffle_manager.stop_raffle(interaction.guild_id)
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+
+        await self.bot.raffle_manager.stop_raffle(interaction.guild.id)
         await interaction.response.send_message("Raffle finished!")
 
     modify = app_commands.Group(
@@ -240,7 +263,11 @@ class Raffle(commands.GroupCog):
         new_role: discord.Role,
     ):
         """Add a role to raffle"""
-        raffle = self.bot.raffle_manager.get_raffle(interaction.guild_id)
+        if interaction.guild is None:
+            return await interaction.response.send_message(
+                "This command can't be used in DMs!"
+            )
+        raffle = self.bot.raffle_manager.get_raffle(interaction.guild.id)
         self.bot.s.add(GiveawayRole(id=new_role.id, giveaway=raffle.id))
         self.bot.s.commit()
         await interaction.response.send_message(

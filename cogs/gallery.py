@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import aiohttp
 import asyncio
 import discord
@@ -5,9 +7,13 @@ import discord
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from sqlalchemy.orm import contains_eager
-
+from typing import TYPE_CHECKING
 from utils.checks import not_blacklisted
 from utils.database import Art, Artist, BlackList, Guild
+
+
+if TYPE_CHECKING:
+    from main import Mayushii
 
 
 class GalleryView(discord.ui.View):
@@ -33,7 +39,7 @@ class GalleryView(discord.ui.View):
         art = self.artist.gallery[self.current]
         embed.set_author(
             name=f"{self.artist_user.display_name}'s Gallery {self.current + 1}",
-            icon_url=self.artist_user.avatar.url,
+            icon_url=self.artist_user.avatar.url if self.artist_user.avatar else None,
         )
         footer = f"Art id: {art.id}"
         if art.link.lower().endswith((".gif", ".png", ".jpeg", "jpg")):
@@ -78,11 +84,11 @@ class GalleryView(discord.ui.View):
 class Gallery(commands.Cog):
     """Commands for managing a user gallery."""
 
-    def __init__(self, bot):
-        self.bot = bot
+    def __init__(self, bot: Mayushii):
+        self.bot: Mayushii = bot
         self.logger = self.bot.get_logger(self)
-        self.cleanup = False
-        self.bot.art_channels = {
+        self.in_cleanup = False
+        self.art_channels = {
             guild.id: guild.art_channel for guild in self.bot.s.query(Guild).all()
         }
 
@@ -91,17 +97,22 @@ class Gallery(commands.Cog):
         return dbguild.flags & 0b10
 
     async def no_cleanup(self):
-        while self.cleanup:
+        while self.in_cleanup:
             pass
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        if message.guild is None:
+            return
+
         if (
-            isinstance(message.channel, discord.abc.PrivateChannel)
-            or message.author == message.guild.me
+            message.author.id == self.bot.user.id
+            or message.author.bot
+            or not isinstance(message.author, discord.Member)
         ):
             return
-        art_channel_id = self.bot.art_channels.get(message.guild.id)
+
+        art_channel_id = self.art_channels.get(message.guild.id)
         if not self.is_enabled(message.guild) or art_channel_id is None:
             return
         if message.channel.id == art_channel_id:
@@ -160,7 +171,7 @@ class Gallery(commands.Cog):
     @art.command()
     async def add(self, interaction, link: str, description: str):
         """Adds link to user gallery"""
-        if interaction.channel.id != self.bot.art_channels.get(interaction.guild_id):
+        if interaction.channel.id != self.art_channels.get(interaction.guild.id):
             return await interaction.response.send_message(
                 "This command can only be used in the art channel."
             )
@@ -213,7 +224,7 @@ class Gallery(commands.Cog):
     async def cleanup(self, interaction):
         """Cleans up the galleries of invalid links"""
         todelete = []
-        self.cleanup = True
+        self.in_cleanup = True
         await interaction.response.send_message(
             "Starting gallery cleanup (This might take a while)!"
         )
@@ -238,7 +249,7 @@ class Gallery(commands.Cog):
                 return True
 
         for art in arts:
-            task = asyncio.ensure_future(head(art.link, self.bot.session))
+            task = asyncio.ensure_future(head(art.link, self.bot.session))  # type: ignore
             tasks.append(task)
         responses = await asyncio.gather(*tasks)
 
@@ -255,7 +266,7 @@ class Gallery(commands.Cog):
             )
         else:
             await interaction.edit_original_message(content="No invalid images found!")
-        self.cleanup = False
+        self.in_cleanup = False
         await self.bot.change_presence(status=discord.Status.online)
 
     @app_commands.checks.has_permissions(manage_guild=True)
@@ -265,7 +276,7 @@ class Gallery(commands.Cog):
         """Sets a Text channel as the art channel"""
         dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
         dbguild.art_channel = channel.id
-        self.bot.art_channel[interaction.guild.id] = channel.id
+        self.art_channels[interaction.guild.id] = channel.id
         self.bot.s.commit()
         await interaction.response.send_message(f"Set art channel to {channel.mention}")
 

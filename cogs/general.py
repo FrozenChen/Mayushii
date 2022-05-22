@@ -1,12 +1,16 @@
+from __future__ import annotations
+
 import discord
 import subprocess
 
 from discord import app_commands
 from discord.ext import commands
-
-from main import Mayushii
+from typing import TYPE_CHECKING
 from utils.database import Guild, BlackList
 from utils.exceptions import BotOwnerOnly
+
+if TYPE_CHECKING:
+    from main import Mayushii
 
 
 def bot_owner_only(interaction):
@@ -214,5 +218,5 @@ class General(commands.Cog):
         )
 
 
-async def setup(bot: Mayushii):
+async def setup(bot):
     await bot.add_cog(General(bot))
