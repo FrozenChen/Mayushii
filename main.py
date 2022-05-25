@@ -80,7 +80,9 @@ class Mayushii(commands.Bot):
                 self.logger.error(f"Extension {cog} not found")
 
     def get_error_channel(self, interaction) -> Optional[discord.TextChannel]:
-        if dbguild := self.s.query(Guild).get(interaction.guild.id):
+        if interaction.guild and (
+            dbguild := self.s.query(Guild).get(interaction.guild.id)
+        ):
             c = interaction.guild.get_channel(dbguild.error_channel)
             error_channel = c if c.type == discord.ChannelType.text else None
         else:
@@ -207,13 +209,13 @@ class Mayutree(app_commands.CommandTree):
                     await interaction.response.send_message(msg, ephemeral=True)
             except Exception:
                 pass
-            embed = create_error_embed(interaction, error)
             exc_text = (
                 f"{''.join(format_exception(type(error), error, error.__traceback__))}"
             )
             logger.error(f"Unhandled exception occurred `{command_name}`")
             logger.debug(exc_text)
             if error_channel:
+                embed = create_error_embed(interaction, error)
                 await error_channel.send(embed=embed)
 
 
