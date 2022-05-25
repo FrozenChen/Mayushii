@@ -7,7 +7,7 @@ import discord
 from discord import ButtonStyle, app_commands
 from discord.ext import commands
 from sqlalchemy.orm import contains_eager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from utils.checks import not_blacklisted
 from utils.database import Art, Artist, BlackList, Guild
 
@@ -25,8 +25,9 @@ class GalleryView(discord.ui.View):
         self.artist = artist
         self.artist_user = member
         self.current = 0
-        self.message = None
-        if len(artist.gallery) == 1:
+        self.n_pages = len(artist.gallery)
+        self.message: Optional[discord.Message] = None
+        if self.n_pages == 1:
             self.clear_items()
             self.stop()
 
@@ -48,36 +49,36 @@ class GalleryView(discord.ui.View):
                 footer += f"\n{art.description}"
         else:
             embed.description = f"{art.description}\n{art.link}"
-        footer += f"\n{self.current + 1}/{len(self.artist.gallery)}"
+        footer += f"\n{self.current + 1}/{self.n_pages}"
         embed.set_footer(text=footer)
         return embed
 
-    @discord.ui.button(label="Previous", style=ButtonStyle.primary)
-    async def previous_button(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        self.current = (self.current - 1) % len(self.artist.gallery)
-        await interaction.response.edit_message(embed=self.create_embed())
-
-    @discord.ui.button(label="Next", style=ButtonStyle.primary)
-    async def next_button(
-        self, interaction: discord.Interaction, button: discord.ui.Button
-    ):
-        self.current = (self.current + 1) % len(self.artist.gallery)
-        await interaction.response.edit_message(embed=self.create_embed())
-
-    @discord.ui.button(label="First", style=ButtonStyle.primary)
-    async def first_button(
+    @discord.ui.button(label="<<", style=ButtonStyle.secondary, disabled=True)
+    async def first_page(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         self.current = 0
         await interaction.response.edit_message(embed=self.create_embed())
 
-    @discord.ui.button(label="Latest", style=ButtonStyle.primary)
-    async def latest_button(
+    @discord.ui.button(label="Back", style=ButtonStyle.primary, disabled=True)
+    async def prev_page(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        self.current = len(self.artist.gallery) - 1
+        self.current = (self.current - 1) % self.n_pages
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    @discord.ui.button(label="Next", style=ButtonStyle.primary)
+    async def next_page(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.current = (self.current + 1) % self.n_pages
+        await interaction.response.edit_message(embed=self.create_embed())
+
+    @discord.ui.button(label=">>", style=ButtonStyle.secondary)
+    async def last_page(
+        self, interaction: discord.Interaction, button: discord.ui.Button
+    ):
+        self.current = self.n_pages - 1
         await interaction.response.edit_message(embed=self.create_embed())
 
 
