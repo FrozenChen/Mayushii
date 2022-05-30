@@ -30,6 +30,8 @@ def is_enabled(interaction):
     return dbguild.flags & 0b100
 
 
+@app_commands.guild_only
+@app_commands.default_permissions(manage_channels=True)
 class Raffle(commands.GroupCog):
     """Raffle related commands"""
 

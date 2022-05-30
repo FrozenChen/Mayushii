@@ -15,6 +15,8 @@ def is_enabled(interaction):
     return dbguild.flags & 0b1000
 
 
+@app_commands.guild_only
+@app_commands.default_permissions(manage_channels=True)
 class Voting(commands.GroupCog, name="poll"):
     """Commands for managing a poll."""
 

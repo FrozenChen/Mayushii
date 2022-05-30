@@ -6,6 +6,7 @@ from utils.database import CommunityRole, Guild
 from utils.utilities import gen_color
 
 
+@app_commands.guild_only
 class Community(commands.GroupCog, name="communityrole"):
     """General commands for members."""
 
