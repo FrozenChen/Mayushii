@@ -94,7 +94,7 @@ class VoteManager:
             result = self.count_votes(poll)
             embed = discord.Embed(
                 title=f"The {poll.name} has ended!",
-                description="Congratulation to the winner!",
+                description="Congratulations to the winner!",
             )
             msg = ""
             for x in result.keys():
