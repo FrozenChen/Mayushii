@@ -136,20 +136,25 @@ class General(commands.Cog):
         await self.bot.close()
 
     @app_commands.check(bot_owner_only)
-    @app_commands.describe(url="Link to the new pfp image")
+    @app_commands.describe(image="Image to set as the new pfp")
     @group_bot.command()
-    async def changepfp(self, interaction, url: str):
+    async def changepfp(self, interaction, image: discord.Attachment):
         """Change bot profile picture"""
-        async with self.bot.session.get(url) as r:
-            if r.status != 200:
-                return await interaction.response.send_message(
-                    "Failed to retrieve image!"
-                )
-            data = await r.read()
-            await self.bot.user.edit(avatar=data)
-            await interaction.response.send_message.send(
-                "Profile picture changed successfully."
+
+        if not image.content_type or image.content_type not in (
+            "image/jpeg",
+            "image/png",
+            "image/gif",
+        ):
+            return await interaction.response.send_message(
+                "This is not a valid image.", ephemeral=True
             )
+
+        image_bytes = await image.read()
+        await self.bot.user.edit(avatar=image_bytes)
+        await interaction.response.send_message(
+            "Profile picture changed successfully.", ephemeral=True
+        )
 
     @app_commands.check(bot_owner_only)
     @app_commands.describe(channel="Text channel to set as the error channel")
