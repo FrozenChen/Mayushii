@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import aiohttp
 import asyncio
+import datetime
 import discord
 
 from discord import ButtonStyle, app_commands
@@ -10,7 +11,7 @@ from sqlalchemy.orm import contains_eager
 from typing import TYPE_CHECKING, Optional
 from utils.checks import not_blacklisted
 from utils.database import Art, Artist, BlackList, Guild
-
+from utils.utilities import DateTransformer
 
 if TYPE_CHECKING:
     from main import Mayushii
@@ -89,7 +90,7 @@ class Gallery(commands.Cog):
         self.bot: Mayushii = bot
         self.logger = self.bot.get_logger(self)
         self.in_cleanup = False
-        self.art_channels = {
+        self.art_channels: dict[int, int] = {
             guild.id: guild.art_channel for guild in self.bot.s.query(Guild).all()
         }
 
@@ -262,11 +263,11 @@ class Gallery(commands.Cog):
             for art in todelete:
                 self.bot.s.delete(art)
             self.bot.s.commit()
-            await interaction.edit_original_message(
+            await interaction.edit_original_response(
                 content=f"Deleted {len(todelete)} invalid images!"
             )
         else:
-            await interaction.edit_original_message(content="No invalid images found!")
+            await interaction.edit_original_response(content="No invalid images found!")
         self.in_cleanup = False
         await self.bot.change_presence(status=discord.Status.online)
 
@@ -312,6 +313,34 @@ class Gallery(commands.Cog):
         self.bot.s.delete(artist)
         self.bot.s.commit()
         await interaction.response.send_message("Artist deleted")
+
+    @app_commands.checks.has_permissions(kick_members=True)
+    @app_commands.describe(after="Will get all pinned messages after this date. Format YYYY-MM-DD.")
+    @app_commands.guild_only
+    @app_commands.command()
+    async def get_contest_entries(self, interaction: discord.Interaction, after: app_commands.Transform[datetime.datetime, DateTransformer]):
+        """Gets contest entries if there is any."""
+        assert interaction.guild is not None
+        channel_id = self.art_channels.get(interaction.guild.id)
+
+        if not channel_id or not (art_channel := interaction.guild.get_channel(channel_id)):
+            return await interaction.response.send_message("No art channel found.", ephemeral=True)
+
+        assert isinstance(art_channel, discord.TextChannel)
+
+        floor_snowflake = discord.utils.time_snowflake(after)
+
+        entries = []
+        for msg in await art_channel.pins():
+            if msg.id > floor_snowflake:
+                if msg.attachments:
+                    entries.append(f"{msg.author.name}({msg.author.id}) - {msg.attachments[0].url}")
+                else:
+                    entries.append(f"{msg.author.name}({msg.author.id}) - {msg.content}")
+        if entries:
+            await interaction.response.send_message('\n'.join(entries), ephemeral=True)
+        else:
+            await interaction.response.send_message("No entries found.", ephemeral=True)
 
 
 async def setup(bot):

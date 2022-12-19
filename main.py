@@ -84,10 +84,9 @@ class Mayushii(commands.Bot):
             dbguild := self.s.query(Guild).get(interaction.guild.id)
         ):
             c = interaction.guild.get_channel(dbguild.error_channel)
-            error_channel = c if c.type == discord.ChannelType.text else None
-        else:
-            error_channel = None
-        return error_channel
+            if c and c.type == discord.ChannelType.text:
+                return c
+        return None
 
     async def on_command_error(self, ctx, exc):
         logger = self.logger if ctx.cog is None else ctx.cog.logger
@@ -202,7 +201,7 @@ class Mayutree(app_commands.CommandTree):
             msg = f"Unhandled exception in `{command_name}`"
             try:
                 if interaction.response.is_done():
-                    await interaction.edit_original_message(
+                    await interaction.edit_original_response(
                         content=msg, embed=None, view=None
                     )
                 else:

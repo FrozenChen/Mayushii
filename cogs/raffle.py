@@ -132,7 +132,7 @@ class Raffle(commands.GroupCog):
                 if end_date and (
                     end_date < start or (end_date - start).total_seconds() < 600
                 ):
-                    return await interaction.edit_original_message(
+                    return await interaction.edit_original_response(
                         content="A raffle has to last longer than 10 minutes",
                         view=None,
                         embed=None,
@@ -169,13 +169,13 @@ class Raffle(commands.GroupCog):
                     raffle, description=description
                 ),
             )
-            await interaction.edit_original_message(
+            await interaction.edit_original_response(
                 content=f"Started giveaway {name} with {winners} possible winners! Use `/raffle join`to join",
                 embed=None,
                 view=None,
             )
         else:
-            await interaction.edit_original_message(content="Alright then.")
+            await interaction.edit_original_response(content="Alright then.")
 
     @app_commands.checks.has_permissions(manage_channels=True)
     @app_commands.check(ongoing_raffle)
@@ -219,10 +219,10 @@ class Raffle(commands.GroupCog):
             await self.bot.raffle_manager.views[interaction.guild.id].stop()
             del self.bot.raffle_manager.views[interaction.guild.id]
             self.bot.s.commit()
-            return await interaction.edit_original_message(
+            return await interaction.edit_original_response(
                 content="Giveaway cancelled.", view=None
             )
-        await interaction.edit_original_message(
+        await interaction.edit_original_response(
             content="And the raffle continues.", view=None
         )
 

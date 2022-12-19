@@ -5,6 +5,7 @@ import traceback
 
 from datetime import datetime
 from discord import app_commands
+from typing import Optional
 
 
 # thanks ihaveahax
@@ -46,9 +47,7 @@ def create_error_embed(interaction, exc) -> discord.Embed:
         title=f"Unexpected exception in command {name}",
         color=0xE50730,
     )
-    trace = "".join(
-        traceback.format_exception(etype=None, value=exc, tb=exc.__traceback__)
-    )
+    trace = "".join(traceback.format_exception(exc))
     embed.description = f"```py\n{trace}```"
     embed.add_field(name="Exception Type", value=exc.__class__.__name__)
     embed.add_field(
@@ -71,36 +70,38 @@ def parse_time(time_string) -> int:
     return sum(int(item[:-1]) * units[item[-1]] for item in match)
 
 
+def parse_date(date_string: str) -> Optional[datetime]:
+    date_lst = date_string.split(' ')
+
+    if len(date_lst) == 1:
+        date_lst.append('00:00')
+    elif len(date_lst) != 2:
+        return None
+    try:
+        datetime_obj = datetime.strptime(' '.join(date_lst), "%Y-%m-%d %H:%M")
+    except ValueError:
+        return None
+    return datetime_obj
+
+
 class TimeTransformer(app_commands.Transformer):
-    @classmethod
-    async def transform(cls, interaction: discord.Interaction, value: str) -> int:
+    async def transform(self, interaction: discord.Interaction, value: str) -> int:
         seconds = parse_time(value)
         if seconds > 0:
             return seconds
-        raise app_commands.TransformerError(
-            "Invalid time format", discord.AppCommandOptionType.integer, cls
-        )
+        raise app_commands.TransformerError("Invalid time format", discord.AppCommandOptionType.string, self)
 
 
 class DateTransformer(app_commands.Transformer):
-    @classmethod
-    async def transform(cls, interaction: discord.Interaction, value: str) -> datetime:
-
-        data = value.split(" ")
-        if len(data) == 2:
-            return datetime.strptime(value, "%d/%m/%y %H:%M:%S")
-        elif len(data) == 1:
-            return datetime.strptime(value, "%d/%m/%y")
-        else:
-            raise app_commands.TransformerError(
-                "Invalid date format", discord.AppCommandOptionType.string, cls
-            )
+    async def transform(self, interaction: discord.Interaction, value: str) -> datetime:
+        if (datetime_obj := parse_date(value)) is not None:
+            return datetime_obj
+        raise app_commands.TransformerError("Invalid time format", discord.AppCommandOptionType.string, self)
 
 
 class GreedyRoleTransformer(app_commands.Transformer):
-    @classmethod
     async def transform(
-        cls, interaction: discord.Interaction, value: str
+        self, interaction: discord.Interaction, value: str
     ) -> list[discord.Role]:
         data = value.split(",")
         roles = []
@@ -113,6 +114,6 @@ class GreedyRoleTransformer(app_commands.Transformer):
                     roles.append(role)
             except (discord.NotFound, ValueError):
                 raise app_commands.TransformerError(
-                    "Invalid date format", discord.AppCommandOptionType.role, cls
+                    "Invalid date format", discord.AppCommandOptionType.role, self
                 )
         return roles

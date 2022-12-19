@@ -71,8 +71,8 @@ class Voting(commands.GroupCog, name="poll"):
             Optional[datetime.datetime], DateTransformer
         ] = None,
         lasts: app_commands.Transform[Optional[int], TimeTransformer] = None,
-        attachment: discord.Attachment = None,
-        url: str = None,
+        attachment: Optional[discord.Attachment] = None,
+        url: Optional[str] = None,
     ):
         """Creates a poll"""
 
@@ -112,7 +112,7 @@ class Voting(commands.GroupCog, name="poll"):
                 if end_date and (
                     end_date < start or (end_date - start).total_seconds() < 600
                 ):
-                    return await interaction.edit_original_message(
+                    return await interaction.edit_original_response(
                         content="A poll has to last longer than 10 minutes",
                         view=None,
                         embed=None,
@@ -151,11 +151,11 @@ class Voting(commands.GroupCog, name="poll"):
             self.bot.s.commit()
             self.logger.info(f"Enabled poll {poll.name}")
             self.bot.poll_manager.polls[interaction.guild.id] = poll
-            await interaction.edit_original_message(
+            await interaction.edit_original_response(
                 content="Poll Created!", view=None, embed=None
             )
         else:
-            await interaction.edit_original_message(
+            await interaction.edit_original_response(
                 content="Alright then.", view=None, embed=None
             )
 
