@@ -11,7 +11,7 @@ from sqlalchemy.orm import contains_eager
 from typing import TYPE_CHECKING, Optional
 from utils.checks import not_blacklisted
 from utils.database import Art, Artist, BlackList, Guild
-from utils.utilities import DateTransformer
+from utils.utilities import DateTransformer, gen_color
 
 if TYPE_CHECKING:
     from main import Mayushii
@@ -169,7 +169,7 @@ class Gallery(commands.Cog):
     art = app_commands.Group(name="art", description="Commands for managing art")
 
     @app_commands.check(not_blacklisted)
-    @app_commands.describe(link="Link to the art", description="Description of the art")
+    @app_commands.describe(link="Link to the art.", description="Description of the art.")
     @art.command()
     async def add(self, interaction, link: str, description: str):
         """Adds link to user gallery"""
@@ -177,16 +177,29 @@ class Gallery(commands.Cog):
             return await interaction.response.send_message(
                 "This command can only be used in the art channel."
             )
-        if (
-            not link.lower().endswith((".gif", ".png", ".jpeg", "jpg"))
-            and description == ""
-        ):
+        is_image = link.lower().endswith((".gif", ".png", ".jpeg", "jpg"))
+        if not is_image and description == "":
             await interaction.response.send_message(
                 "Add a description for non image entries!", ephemeral=True
             )
         else:
-            id = await self.add_art(interaction.user, link, description)
-            await interaction.response.send_message(f"Added art with id {id}!")
+            art_id = await self.add_art(interaction.user, link, description)
+            embed = discord.Embed(color=gen_color(interaction.user.id))
+            embed.set_author(
+                name=f"{interaction.user.display_name}",
+                icon_url=interaction.user.avatar.url if interaction.user.avatar else None,
+            )
+
+            footer = ""
+            if is_image:
+                embed.set_image(url=link)
+                if description:
+                    footer += f"\n{description}"
+            else:
+                embed.description = f"{description}\n{link}"
+            footer += f"\nArt id: {art_id}"
+            embed.set_footer(text=footer)
+            await interaction.response.send_message(embed=embed)
 
     @app_commands.describe(art_id="ID of the art to delete")
     @art.command(name="delete")
