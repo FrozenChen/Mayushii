@@ -5,13 +5,11 @@ import random
 
 from datetime import datetime
 from main import Mayushii
-from typing import Optional, Literal, TYPE_CHECKING
+from typing import Optional, Literal
 from utils.database import Poll, Voter, Giveaway, GiveawayEntry, GiveawayRole
 from utils.exceptions import NoOnGoingPoll
 from utils.utilities import gen_color
-
-if TYPE_CHECKING:
-    from utils.views import RaffleView
+from utils.views import RaffleView
 
 
 class VoteManager:

@@ -1,8 +1,12 @@
+from __future__ import annotations
+
 import discord
 
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from utils.checks import not_new, not_blacklisted
-from utils.managers import VoteManager, RaffleManager
+
+if TYPE_CHECKING:
+    from utils.managers import VoteManager, RaffleManager
 
 
 class VoteButton(discord.ui.Button["VoteView"]):
