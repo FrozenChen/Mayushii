@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import discord
 import subprocess
+import platform
 
 from discord import app_commands
 from discord.ext import commands
@@ -175,6 +176,11 @@ class General(commands.Cog):
         dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
         embed = discord.Embed()
         embed.add_field(name="Guild", value=f"{interaction.guild.name}", inline=False)
+        embed.add_field(
+            name="Python Version",
+            value=platform.python_version(),
+            inline=False,
+        )
         embed.add_field(
             name="Cogs",
             value="\n".join(
