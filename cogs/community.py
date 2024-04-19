@@ -80,7 +80,7 @@ class Community(commands.GroupCog, name="communityrole"):
             )
         role = discord.utils.get(interaction.user.roles, id=entry.id)
         if not role:
-            return await interaction.response.send_message("You don't have this role")
+            return await interaction.response.send_message("You don't have this role", ephemeral=True)
         try:
             await interaction.user.remove_roles(role)
         except discord.errors.Forbidden:

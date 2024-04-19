@@ -60,7 +60,7 @@ class VoteManager:
 
     def count_votes(self, poll: Poll) -> dict[str, int]:
         result = {}
-        for option in self.parse_options(poll.options):  # type: ignore
+        for option in self.parse_options(poll.options):
             c = (
                 self.bot.s.query(Voter)
                 .filter_by(poll_id=poll.id, option=option)
@@ -183,6 +183,8 @@ class RaffleManager:
             end_date=end_date,
         )
         self.bot.s.add(raffle)
+        self.bot.s.commit()
+        self.bot.s.refresh(raffle)
 
         if roles:
             self.bot.s.add_all(
@@ -208,6 +210,10 @@ class RaffleManager:
                     winners.append(winner)
                 else:
                     self.bot.s.delete(entry)
+        else:
+            for entry in raffle.entries:
+                if (winner := guild.get_member(entry.user_id)) is not None:
+                    winners.append(winner)
         return winners
 
     async def process_entry(self, interaction: discord.Interaction):

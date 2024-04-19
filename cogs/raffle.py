@@ -170,7 +170,7 @@ class Raffle(commands.GroupCog):
                 ),
             )
             await interaction.edit_original_response(
-                content=f"Started giveaway {name} with {winners} possible winners! Use `/raffle join`to join",
+                content=f"Started giveaway {name} with {winners} possible winners.",
                 embed=None,
                 view=None,
             )

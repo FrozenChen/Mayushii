@@ -94,7 +94,7 @@ class Gallery(commands.Cog):
             guild.id: guild.art_channel for guild in self.bot.s.query(Guild).all()
         }
 
-    def is_enabled(self, guild):
+    def is_enabled(self, guild: discord.Guild):
         dbguild = self.bot.s.query(Guild).get(guild.id)
         return dbguild.flags & 0b10
 
@@ -264,7 +264,7 @@ class Gallery(commands.Cog):
                 return True
 
         for art in arts:
-            task = asyncio.ensure_future(head(art.link, self.bot.session))  # type: ignore
+            task = asyncio.ensure_future(head(art.link, self.bot.session))
             tasks.append(task)
         responses = await asyncio.gather(*tasks)
 
