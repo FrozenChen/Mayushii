@@ -11,7 +11,7 @@ from utils.views import VoteView, LinkButton
 
 
 def is_enabled(interaction):
-    dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
+    dbguild = interaction.client.s.get(Guild, interaction.guild.id)
     return dbguild.flags & 0b1000
 
 
@@ -42,7 +42,7 @@ class Voting(commands.GroupCog, name="poll"):
 
     @tasks.loop(seconds=60.0)
     async def check_views(self):
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.UTC)
         for poll in self.bot.poll_manager.polls.values():
             if poll.end and poll.end < now:
                 view = discord.utils.get(
@@ -104,7 +104,7 @@ class Voting(commands.GroupCog, name="poll"):
         )
         await conf_view.wait()
         if conf_view.value:
-            start = datetime.datetime.utcnow()
+            start = datetime.datetime.now(datetime.UTC)
             if lasts or end_date:
                 if lasts:
                     diff = datetime.timedelta(seconds=lasts)

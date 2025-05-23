@@ -162,7 +162,7 @@ class General(commands.Cog):
     @group_bot.command()
     async def seterrchannel(self, interaction, channel: discord.TextChannel):
         """Set the channel to output errors"""
-        dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
+        dbguild = self.bot.s.get(Guild, interaction.guild.id)
         dbguild.error_channel = channel.id
         self.bot.s.commit()
         await interaction.response.send_message(
@@ -173,7 +173,7 @@ class General(commands.Cog):
     @group_bot.command()
     async def status(self, interaction):
         """Shows the bot current guild status"""
-        dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
+        dbguild = self.bot.s.get(Guild, interaction.guild.id)
         embed = discord.Embed()
         embed.add_field(name="Guild", value=f"{interaction.guild.name}", inline=False)
         embed.add_field(
@@ -197,7 +197,7 @@ class General(commands.Cog):
     async def togglecog(self, interaction, cog: str):
         """Enables or disables a cog"""
         if cog in self.cogs:
-            dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
+            dbguild = self.bot.s.get(Guild, interaction.guild.id)
             dbguild.flags ^= self.cogs[cog]
             self.bot.s.commit()
             return await interaction.response.send_message("Cog toggled.")
@@ -215,7 +215,7 @@ class General(commands.Cog):
     @blacklist.command(name="add")
     async def blacklist_add(self, interaction, member: discord.Member):
         """Adds member to blacklist"""
-        if self.bot.s.query(BlackList).get((member.id, interaction.guild.id)):
+        if self.bot.s.get(BlackList, (member.id, interaction.guild.id)):
             await interaction.response.send_message("User is already blacklisted")
             return
         self.bot.s.add(BlackList(userid=member.id, guild=interaction.guild.id))
@@ -227,7 +227,7 @@ class General(commands.Cog):
     @blacklist.command(name="remove")
     async def blacklist_remove(self, interaction, member: discord.Member):
         """Removes member from blacklist."""
-        user = self.bot.s.query(BlackList).get((member.id, interaction.guild.id))
+        user = self.bot.s.get(BlackList, (member.id, interaction.guild.id))
         if not user:
             await interaction.response.send_message("User is not blacklisted")
             return

@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Integer, ForeignKey, Boolean, TIMESTAMP
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Mapped
 
 Base = declarative_base()
 
@@ -10,8 +10,7 @@ class Artist(Base):
     id = Column(Integer, primary_key=True)
     userid = Column(Integer)
     guild = Column(Integer)
-    gallery = relationship(
-        "Art",
+    gallery: Mapped[list["Art"]] = relationship(
         back_populates="artist",
         cascade="all, delete, delete-orphan",
     )
@@ -26,8 +25,7 @@ class Art(Base):
     artist_id = Column(Integer, ForeignKey("artist.id"))
     link = Column(String)
     description = Column(String)
-    artist = relationship(
-        "Artist",
+    artist: Mapped["Artist"] = relationship(
         back_populates="gallery",
     )
 
@@ -75,8 +73,8 @@ class Poll(Base):
     start = Column(TIMESTAMP)
     end = Column(TIMESTAMP)
 
-    voters = relationship(
-        "Voter", back_populates="poll", cascade="all, delete, delete-orphan"
+    voters: Mapped[list["Voter"]] = relationship(
+        back_populates="poll", cascade="all, delete, delete-orphan"
     )
 
     def __repr__(self):
@@ -93,7 +91,7 @@ class Voter(Base):
     poll_id = Column(Integer, ForeignKey("polls.id"), primary_key=True)
     option = Column(String, default=None)
 
-    poll = relationship("Poll", back_populates="voters")
+    poll: Mapped["Poll"] = relationship(back_populates="voters")
 
     def __repr__(self):
         return f"<Voter userid={self.userid}'>"
@@ -121,12 +119,11 @@ class Giveaway(Base):
     max_participants = Column(Integer)
     win_count = Column(Integer)
 
-    entries = relationship(
-        "GiveawayEntry", back_populates="giveaway", cascade="all, delete, delete-orphan"
+    entries: Mapped[list["GiveawayEntry"]] = relationship(
+        back_populates="giveaway", cascade="all, delete, delete-orphan"
     )
 
-    roles = relationship(
-        "GiveawayRole",
+    roles: Mapped[list["GiveawayRole"]] = relationship(
         back_populates="giveaway",
         cascade="all, delete, delete-orphan",
     )
@@ -140,7 +137,7 @@ class GiveawayRole(Base):
     id = Column(Integer, primary_key=True)
     giveaway_id = Column(Integer, ForeignKey("giveaway.id"), primary_key=True)
 
-    giveaway = relationship("Giveaway", back_populates="roles")
+    giveaway: Mapped["Giveaway"] = relationship(back_populates="roles")
 
     def __repr__(self):
         return f"<GiveawayRole id={self.id}, giveaway={self.giveaway_id}>"
@@ -153,7 +150,7 @@ class GiveawayEntry(Base):
 
     winner = Column(Boolean, default=False)
 
-    giveaway = relationship("Giveaway", back_populates="entries")
+    giveaway: Mapped["Giveaway"] = relationship(back_populates="entries")
 
     def __repr__(self):
         return f"<GiveawayEntry giveaway={self.giveaway_id}, winner={self.winner}>"

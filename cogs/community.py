@@ -19,7 +19,7 @@ class Community(commands.GroupCog, name="communityrole"):
 
     @staticmethod
     def is_enabled(interaction):
-        dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
+        dbguild = interaction.client.s.get(Guild, interaction.guild.id)
         return dbguild.flags & 0b1
 
     def load_roles(self):
@@ -80,7 +80,9 @@ class Community(commands.GroupCog, name="communityrole"):
             )
         role = discord.utils.get(interaction.user.roles, id=entry.id)
         if not role:
-            return await interaction.response.send_message("You don't have this role", ephemeral=True)
+            return await interaction.response.send_message(
+                "You don't have this role", ephemeral=True
+            )
         try:
             await interaction.user.remove_roles(role)
         except discord.errors.Forbidden:
@@ -140,7 +142,7 @@ class Community(commands.GroupCog, name="communityrole"):
             .one_or_none()
         ):
             await interaction.response.send_message("This alias is already in use.")
-        elif self.bot.s.query(CommunityRole).get((role.id, interaction.guild.id)):
+        elif self.bot.s.get(CommunityRole, (role.id, interaction.guild.id)):
             return await interaction.response.send_message(
                 "This role is a community role already."
             )
@@ -167,9 +169,7 @@ class Community(commands.GroupCog, name="communityrole"):
     async def delete(self, interaction, role: discord.Role):
         """Deletes a server role from the community roles"""
         if not (
-            entry := self.bot.s.query(CommunityRole).get(
-                (role.id, interaction.guild.id)
-            )
+            entry := self.bot.s.get(CommunityRole, (role.id, interaction.guild.id))
         ):
             return await interaction.response.send_message(
                 "This role is not a community role."

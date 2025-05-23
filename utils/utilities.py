@@ -71,14 +71,14 @@ def parse_time(time_string) -> int:
 
 
 def parse_date(date_string: str) -> Optional[datetime]:
-    date_lst = date_string.split(' ')
+    date_lst = date_string.split(" ")
 
     if len(date_lst) == 1:
-        date_lst.append('00:00')
+        date_lst.append("00:00")
     elif len(date_lst) != 2:
         return None
     try:
-        datetime_obj = datetime.strptime(' '.join(date_lst), "%Y-%m-%d %H:%M")
+        datetime_obj = datetime.strptime(" ".join(date_lst), "%Y-%m-%d %H:%M")
     except ValueError:
         return None
     return datetime_obj
@@ -89,14 +89,18 @@ class TimeTransformer(app_commands.Transformer):
         seconds = parse_time(value)
         if seconds > 0:
             return seconds
-        raise app_commands.TransformerError("Invalid time format", discord.AppCommandOptionType.string, self)
+        raise app_commands.TransformerError(
+            "Invalid time format", discord.AppCommandOptionType.string, self
+        )
 
 
 class DateTransformer(app_commands.Transformer):
     async def transform(self, interaction: discord.Interaction, value: str) -> datetime:
         if (datetime_obj := parse_date(value)) is not None:
             return datetime_obj
-        raise app_commands.TransformerError("Invalid time format", discord.AppCommandOptionType.string, self)
+        raise app_commands.TransformerError(
+            "Invalid time format", discord.AppCommandOptionType.string, self
+        )
 
 
 class GreedyRoleTransformer(app_commands.Transformer):

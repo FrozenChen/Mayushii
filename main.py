@@ -29,6 +29,8 @@ class Mayushii(commands.Bot):
     user: discord.ClientUser
     s: sqlalchemy.orm.Session
     session: aiohttp.ClientSession
+    
+    setup_complete = False
 
     def __init__(self, command_prefix, **options):
         super().__init__(command_prefix, **options)
@@ -64,12 +66,15 @@ class Mayushii(commands.Bot):
         return logger
 
     async def on_ready(self):
+        if self.setup_complete:
+            return
         for guild in self.guilds:
-            if not self.s.query(Guild).get(guild.id):
+            if not self.s.get(Guild, guild.id):
                 self.s.add(Guild(id=guild.id, name=guild.name))
             self.s.commit()
         await self.load_cogs()
         self.logger.info(f"Initialized on {','.join(x.name for x in self.guilds)}")
+        self.setup_complete = True
 
     async def load_cogs(self):
         for cog in cogs:
@@ -80,9 +85,7 @@ class Mayushii(commands.Bot):
                 self.logger.error(f"Extension {cog} not found")
 
     def get_error_channel(self, interaction) -> Optional[discord.TextChannel]:
-        if interaction.guild and (
-            dbguild := self.s.query(Guild).get(interaction.guild.id)
-        ):
+        if interaction.guild and (dbguild := self.s.get(Guild, interaction.guild.id)):
             c = interaction.guild.get_channel(dbguild.error_channel)
             if c and c.type == discord.ChannelType.text:
                 return c

@@ -26,7 +26,7 @@ def ongoing_raffle(interaction):
 
 
 def is_enabled(interaction):
-    dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
+    dbguild = interaction.client.s.get(Guild, interaction.guild.id)
     return dbguild.flags & 0b100
 
 
@@ -55,7 +55,7 @@ class Raffle(commands.GroupCog):
 
     @tasks.loop(seconds=60.0)
     async def check_views(self):
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.UTC)
         for raffle in self.bot.raffle_manager.raffles.values():
             if raffle.end_date and raffle.end_date < now:
                 view = discord.utils.get(
@@ -124,7 +124,7 @@ class Raffle(commands.GroupCog):
         )
         await view.wait()
         if view.value:
-            start = datetime.datetime.utcnow()
+            start = datetime.datetime.now(datetime.UTC)
             if lasts or end_date:
                 if lasts:
                     diff = datetime.timedelta(seconds=lasts)

@@ -95,7 +95,7 @@ class Gallery(commands.Cog):
         }
 
     def is_enabled(self, guild: discord.Guild):
-        dbguild = self.bot.s.query(Guild).get(guild.id)
+        dbguild = self.bot.s.get(Guild, guild.id)
         return dbguild.flags & 0b10
 
     async def no_cleanup(self):
@@ -140,7 +140,7 @@ class Gallery(commands.Cog):
 
     async def add_art(self, member: discord.Member, url, description=""):
         await asyncio.wait_for(self.no_cleanup(), timeout=None)
-        if self.bot.s.query(BlackList).get((member.id, member.guild.id)):
+        if self.bot.s.get(BlackList, (member.id, member.guild.id)):
             return
         if not (artist := self.get_artist(member)):
             artist = self.add_artist(member)
@@ -169,7 +169,9 @@ class Gallery(commands.Cog):
     art = app_commands.Group(name="art", description="Commands for managing art")
 
     @app_commands.check(not_blacklisted)
-    @app_commands.describe(link="Link to the art.", description="Description of the art.")
+    @app_commands.describe(
+        link="Link to the art.", description="Description of the art."
+    )
     @art.command()
     async def add(self, interaction, link: str, description: str):
         """Adds link to user gallery"""
@@ -187,7 +189,9 @@ class Gallery(commands.Cog):
             embed = discord.Embed(color=gen_color(interaction.user.id))
             embed.set_author(
                 name=f"{interaction.user.display_name}",
-                icon_url=interaction.user.avatar.url if interaction.user.avatar else None,
+                icon_url=(
+                    interaction.user.avatar.url if interaction.user.avatar else None
+                ),
             )
 
             footer = ""
@@ -248,7 +252,7 @@ class Gallery(commands.Cog):
             self.bot.s.query(Art)
             .join(Art.artist)
             .filter(Artist.guild == interaction.guild.id)
-            .options(contains_eager("artist"))
+            .options(contains_eager(Art.artist))
             .all()
         )
         tasks = []
@@ -289,7 +293,7 @@ class Gallery(commands.Cog):
     @art.command()
     async def setchannel(self, interaction, channel: discord.TextChannel):
         """Sets a Text channel as the art channel"""
-        dbguild = self.bot.s.query(Guild).get(interaction.guild.id)
+        dbguild = self.bot.s.get(Guild, interaction.guild.id)
         dbguild.art_channel = channel.id
         self.art_channels[interaction.guild.id] = channel.id
         self.bot.s.commit()
@@ -328,16 +332,26 @@ class Gallery(commands.Cog):
         await interaction.response.send_message("Artist deleted")
 
     @app_commands.checks.has_permissions(kick_members=True)
-    @app_commands.describe(after="Will get all pinned messages after this date. Format YYYY-MM-DD.")
+    @app_commands.describe(
+        after="Will get all pinned messages after this date. Format YYYY-MM-DD."
+    )
     @app_commands.guild_only
     @app_commands.command()
-    async def get_contest_entries(self, interaction: discord.Interaction, after: app_commands.Transform[datetime.datetime, DateTransformer]):
+    async def get_contest_entries(
+        self,
+        interaction: discord.Interaction,
+        after: app_commands.Transform[datetime.datetime, DateTransformer],
+    ):
         """Gets contest entries if there is any."""
         assert interaction.guild is not None
         channel_id = self.art_channels.get(interaction.guild.id)
 
-        if not channel_id or not (art_channel := interaction.guild.get_channel(channel_id)):
-            return await interaction.response.send_message("No art channel found.", ephemeral=True)
+        if not channel_id or not (
+            art_channel := interaction.guild.get_channel(channel_id)
+        ):
+            return await interaction.response.send_message(
+                "No art channel found.", ephemeral=True
+            )
 
         assert isinstance(art_channel, discord.TextChannel)
 
@@ -347,11 +361,15 @@ class Gallery(commands.Cog):
         for msg in await art_channel.pins():
             if msg.id > floor_snowflake:
                 if msg.attachments:
-                    entries.append(f"{msg.author.name}({msg.author.id}) - {msg.attachments[0].url}")
+                    entries.append(
+                        f"{msg.author.name}({msg.author.id}) - {msg.attachments[0].url}"
+                    )
                 else:
-                    entries.append(f"{msg.author.name}({msg.author.id}) - {msg.content}")
+                    entries.append(
+                        f"{msg.author.name}({msg.author.id}) - {msg.content}"
+                    )
         if entries:
-            await interaction.response.send_message('\n'.join(entries), ephemeral=True)
+            await interaction.response.send_message("\n".join(entries), ephemeral=True)
         else:
             await interaction.response.send_message("No entries found.", ephemeral=True)
 

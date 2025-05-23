@@ -21,7 +21,7 @@ class VoteManager:
         }
 
     def get_voter(self, member: discord.Member):
-        return self.bot.s.query(Voter).get((member.id, self.polls[member.guild.id].id))
+        return self.bot.s.get(Voter, (member.id, self.polls[member.guild.id].id))
 
     @staticmethod
     def parse_options(options: str):
@@ -231,7 +231,7 @@ class RaffleManager:
                         "You are not allowed to participate!", ephemeral=True
                     )
         user_id = interaction.user.id
-        entry = self.bot.s.query(GiveawayEntry).get((user_id, raffle.id))
+        entry = self.bot.s.get(GiveawayEntry, (user_id, raffle.id))
         if entry:
             return await interaction.response.send_message(
                 "You are already participating!", ephemeral=True

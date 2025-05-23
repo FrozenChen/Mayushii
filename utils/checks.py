@@ -5,7 +5,7 @@ from utils.database import BlackList, Guild
 
 
 def not_new(interaction):
-    dbguild = interaction.client.s.query(Guild).get(interaction.guild.id)
+    dbguild = interaction.client.s.get(Guild, interaction.guild.id)
     if (
         datetime.datetime.now(datetime.timezone.utc) - interaction.user.joined_at
     ).days < dbguild.min_days:
@@ -16,8 +16,6 @@ def not_new(interaction):
 
 
 def not_blacklisted(interaction):
-    if interaction.client.s.query(BlackList).get(
-        (interaction.user.id, interaction.guild.id)
-    ):
+    if interaction.client.s.get(BlackList, (interaction.user.id, interaction.guild.id)):
         raise BlackListed("You are blacklisted and can't use this command")
     return True
